@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FabTriage Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --paper: #EDF0EE;
+  --panel: #FAFBFA;
+  --ink: #18262B;
+  --muted: #5F6F73;
+  --line: #CBD3D1;
+  --amber: #D99A0B;
+  --amber-soft: #FBF0D2;
+  --hold: #B93A2E;
+  --hold-soft: #F6E1DE;
+  --release: #2E7A57;
+  --release-soft: #DCEEE5;
+  --slate: #3E5A66;
+  --head: "Barlow Semi Condensed", "Arial Narrow", sans-serif;
+  --body: "Barlow", "Helvetica Neue", Arial, sans-serif;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { margin: 0; height: 100%; }
+body {
+  background: var(--paper); color: var(--ink); font: 15px/1.5 var(--body);
+  font-variant-numeric: tabular-nums;
+}
+button, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* ---------- top bar ---------- */
+header.top {
+  display: flex; align-items: baseline; gap: 28px; padding: 14px 24px 12px;
+  border-bottom: 1px solid var(--line); background: var(--panel);
+}
+.brand { font: 700 22px/1 var(--head); letter-spacing: .01em; }
+.brand small { font: 500 14px var(--body); color: var(--muted); margin-left: 10px; letter-spacing: 0; }
+nav.tabs { display: flex; gap: 4px; margin-left: auto; }
+nav.tabs button {
+  border: 0; background: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; color: var(--muted); font-weight: 500;
+}
+nav.tabs button[aria-selected="true"] { background: var(--ink); color: var(--panel); }
+
+/* ---------- three columns ---------- */
+main.console { display: grid; grid-template-columns: 250px minmax(0, 1fr) 360px; height: calc(100vh - 53px); }
+.col { overflow-y: auto; }
+.col.list { border-right: 1px solid var(--line); background: var(--panel); }
+.col.side { border-left: 1px solid var(--line); background: var(--panel); padding: 20px; }
+@media (max-width: 1100px) {
+  main.console { grid-template-columns: 1fr; height: auto; }
+  .col.list, .col.side { border: 0; border-bottom: 1px solid var(--line); }
+  .col.list { max-height: 240px; }
+}
+
+/* ---------- alarm list ---------- */
+.group { padding: 14px 16px 4px; color: var(--muted); font: 600 13px var(--head); }
+.alarm-row {
+  display: grid; grid-template-columns: 38px 1fr auto; gap: 8px; align-items: center; width: 100%;
+  border: 0; border-left: 3px solid transparent; background: none; text-align: left; padding: 8px 14px 8px 13px; cursor: pointer;
+}
+.alarm-row:hover { background: var(--paper); }
+.alarm-row[aria-current="true"] { background: var(--paper); border-left-color: var(--amber); }
+.kind { font: 600 12px var(--head); text-align: center; border-radius: 3px; padding: 1px 0; }
+.kind.OOS { background: var(--hold-soft); color: var(--hold); }
+.kind.OOC { background: var(--amber-soft); color: #8A6100; }
+.kind.FDC { background: #DFE7EA; color: var(--slate); }
+.alarm-row .what { line-height: 1.25; }
+.alarm-row .what b { font-weight: 600; display: block; }
+.alarm-row .what span { color: var(--muted); font-size: 13px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
+.dot.awaiting_signoff { background: var(--amber); }
+.dot.approve { background: var(--release); }
+.dot.reject, .dot.needs_engineer { background: var(--hold); }
+.dot.live { background: var(--amber); animation: pulse 1s infinite alternate; }
+@keyframes pulse { to { opacity: .3; } }
+
+/* ---------- center: the traveler ---------- */
+.traveler { padding: 22px 32px 60px; max-width: 860px; }
+.alarm-head { display: grid; grid-template-columns: 1fr auto; gap: 8px 24px; align-items: end; }
+.alarm-head h1 { margin: 0; font: 600 30px/1.1 var(--head); }
+.alarm-head .sub { color: var(--muted); }
+.reading { text-align: right; }
+.reading .num { font: 700 44px/1 var(--head); }
+.reading .num small { font-size: 20px; font-weight: 500; margin-left: 2px; }
+.gauge { grid-column: 1 / -1; margin-top: 10px; }
+.methods { display: flex; gap: 6px; align-items: center; margin: 22px 0 6px; flex-wrap: wrap; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; background: var(--panel); }
+.seg button { border: 0; background: none; padding: 6px 12px; cursor: pointer; color: var(--muted); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+.btn { border: 1px solid var(--ink); background: var(--ink); color: var(--panel); padding: 6px 14px; border-radius: 5px; cursor: pointer; font-weight: 500; }
+.btn.ghost { background: none; color: var(--ink); }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn.approve { background: var(--release); border-color: var(--release); }
+.btn.reject { background: none; color: var(--hold); border-color: var(--hold); }
+.methods .note { color: var(--muted); font-size: 13px; margin-left: 6px; }
+
+.empty { margin-top: 30px; color: var(--muted); }
+ol.route { list-style: none; margin: 18px 0 0; padding: 0; position: relative; }
+ol.route::before { content: ""; position: absolute; left: 15px; top: 6px; bottom: 6px; width: 2px; background: var(--line); }
+.step { position: relative; display: grid; grid-template-columns: 32px 1fr; gap: 14px; padding: 8px 0; }
+.step .n {
+  width: 32px; height: 32px; border-radius: 50%; background: var(--panel); border: 2px solid var(--line);
+  display: grid; place-items: center; font: 600 14px var(--head); position: relative; z-index: 1;
+}
+.step.flash .body { background: var(--amber-soft); }
+.step .body { border-radius: 6px; padding: 4px 10px 6px; margin-left: -10px; transition: background .6s; }
+.step .title { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.step .title b { font-weight: 600; }
+.chip {
+  display: inline-block; font: 600 12px var(--head); padding: 0 6px; border-radius: 3px; background: var(--amber-soft);
+  color: #7A5600; border: 1px solid #EBCB79; cursor: pointer; line-height: 18px;
+}
+.finding { color: var(--ink); margin-top: 2px; }
+.finding .soft { color: var(--muted); }
+.thought { color: var(--slate); font-style: italic; margin: 2px 0 4px; }
+details.raw summary { color: var(--muted); font-size: 13px; cursor: pointer; width: fit-content; }
+details.raw pre { font-size: 12px; background: var(--paper); padding: 8px; border-radius: 4px; overflow-x: auto; max-height: 260px; }
+.mini { border-collapse: collapse; margin-top: 4px; font-size: 13px; }
+.mini td, .mini th { padding: 1px 10px 1px 0; text-align: left; font-weight: 400; }
+.mini th { color: var(--muted); }
+.mini .hi { color: var(--hold); font-weight: 600; }
+
+.step.refused .n { border-color: var(--hold); color: var(--hold); }
+.step.refused .body { background: var(--hold-soft); }
+.step.refused ul { margin: 4px 0 2px; padding-left: 18px; }
+.step.final .n { border-color: var(--ink); background: var(--ink); color: var(--panel); }
+
+.disposition { margin-top: 6px; }
+.cause { font: 600 22px var(--head); }
+.actions { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 10px; }
+.act { padding: 2px 8px; border-radius: 3px; font-weight: 500; font-size: 14px; background: #DFE7EA; color: var(--slate); }
+.act.hold_lot, .act.hold_chamber { background: var(--hold-soft); color: var(--hold); }
+.act.release_lot { background: var(--release-soft); color: var(--release); }
+.claims { margin: 0; padding: 0; list-style: none; }
+.claims li { display: grid; grid-template-columns: 40px 1fr; gap: 6px; padding: 3px 0; }
+.summary { margin-top: 10px; max-width: 70ch; }
+.signoff { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
+.signoff textarea { width: 100%; max-width: 560px; min-height: 64px; border: 1px solid var(--line); border-radius: 5px; padding: 8px; background: var(--panel); display: block; margin: 8px 0; }
+.signoff .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.stamp { display: inline-block; font: 700 16px var(--head); padding: 2px 10px; border: 2px solid; border-radius: 4px; transform: rotate(-2deg); }
+.stamp.approve { color: var(--release); }
+.stamp.reject { color: var(--hold); }
+.history { margin-top: 14px; color: var(--muted); font-size: 14px; }
+
+/* ---------- side panel ---------- */
+.side h2 { font: 600 16px var(--head); margin: 0 0 6px; }
+.side section { margin-bottom: 24px; }
+.side .cap { color: var(--muted); font-size: 13px; }
+.maps { display: flex; gap: 10px; flex-wrap: wrap; }
+.maps figure { margin: 0; width: 150px; }
+.maps img { width: 150px; height: 150px; display: block; }
+.maps figcaption { font-size: 12px; color: var(--muted); line-height: 1.3; margin-top: 3px; }
+.costs { display: grid; grid-template-columns: 1fr auto; row-gap: 2px; }
+.costs span:nth-child(odd) { color: var(--muted); }
+.truth { background: var(--paper); border-radius: 6px; padding: 10px 12px; }
+svg text { font: 11px var(--body); fill: var(--muted); }
+
+/* ---------- benchmark ---------- */
+.bench { padding: 24px 32px 60px; max-width: 1100px; }
+.bench h1 { font: 600 28px var(--head); margin: 0 0 4px; }
+.bench p.lead { color: var(--muted); margin: 0 0 18px; max-width: 75ch; }
+.bench h2 { font: 600 19px var(--head); margin: 26px 0 8px; }
+table.sum { border-collapse: collapse; width: 100%; background: var(--panel); }
+table.sum th, table.sum td { padding: 8px 12px; border-bottom: 1px solid var(--line); text-align: right; }
+table.sum th:first-child, table.sum td:first-child { text-align: left; }
+table.sum th { font-weight: 500; color: var(--muted); }
+table.sum tr.agent td { font-weight: 600; }
+.bar { display: inline-block; height: 8px; background: var(--ink); margin-right: 8px; vertical-align: middle; border-radius: 1px; }
+.grid { border-collapse: collapse; background: var(--panel); }
+.grid th, .grid td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+.grid th { font-weight: 500; color: var(--muted); }
+.cell { display: inline-flex; gap: 3px; }
+.sq { width: 14px; height: 14px; border-radius: 2px; display: inline-block; background: var(--line); }
+.sq.ok { background: var(--release); }
+.sq.bad { background: var(--hold); }
+.legend { color: var(--muted); font-size: 13px; margin: 6px 0; }
+</style>
+</head>
+<body>
+<header class="top">
+  <div class="brand">FabTriage<small>Alarm investigation, CVD deposition</small></div>
+  <nav class="tabs" role="tablist">
+    <button role="tab" aria-selected="true" data-view="console">Investigations</button>
+    <button role="tab" aria-selected="false" data-view="bench">Benchmark</button>
+  </nav>
+</header>
+
+<main class="console" id="console">
+  <div class="col list" id="list" aria-label="Alarms"></div>
+  <div class="col"><div class="traveler" id="traveler"></div></div>
+  <aside class="col side" id="side"></aside>
+</main>
+<main id="bench" class="bench" hidden></main>
+
+<script>
+const TOOL_NAMES = {
+  get_alarm: "Read the alarm",
+  get_lot_history: "Traced the lot",
+  query_lots: "Listed recent lots",
+  get_chamber_summary: "Compared chambers",
+  get_trend: "Pulled a trend",
+  run_commonality: "Ran commonality analysis",
+  get_fdc_summary: "Checked FDC sensors",
+  get_pm_log: "Read the PM log",
+  request_measurement: "Requested a measurement",
+  get_wafer_map: "Segmented the wafer map",
+  submit_disposition: "Filed a disposition",
+};
+const CAUSES = {
+  chamber: "Deposition chamber",
+  metrology: "Metrology misread",
+  upstream: "Upstream clean step",
+  noise: "One-off wafer",
+  sensor: "FDC sensor fault",
+};
+const ACTIONS = {
+  hold_lot: "Hold lot", release_lot: "Release lot", hold_chamber: "Hold chamber",
+  escalate_upstream: "Escalate upstream", hold_metrology_tool: "Hold metrology tool", flag_sensor: "Flag sensor",
+};
+const METHOD_NAMES = { agent: "Agent", playbook: "Fixed playbook", always_hold: "Always hold" };
+
+const state = { cases: [], liveEnabled: false, caseId: null, method: "agent", run: null, ctx: null, showTruth: false, poll: null };
+const $ = (s, el = document) => el.querySelector(s);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const fmt = (v, d = 2) => (typeof v === "number" ? v.toFixed(d) : esc(v));
+async function api(path, body) {
+  const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
+  return r.json();
+}
+
+/* ---------------- list ---------------- */
+async function loadCases() {
+  const data = await api("/api/cases");
+  state.cases = data.cases;
+  state.liveEnabled = data.live_enabled;
+  renderList();
+}
+function renderList() {
+  const groups = { dev: "Development alarms", holdout: "Held-out alarms" };
+  let html = "";
+  for (const [split, label] of Object.entries(groups)) {
+    html += `<div class="group">${label}</div>`;
+    for (const c of state.cases.filter((x) => x.split === split)) {
+      const a = c.alarm, run = c.runs.agent;
+      const dot = run ? (run.live ? "live" : run.signoff || run.status) : "";
+      const val = a.type === "FDC" ? `${fmt(a.value, 1)} °C` : `${fmt(a.value)} Å`;
+      html += `<button class="alarm-row" data-case="${c.case_id}" aria-current="${c.case_id === state.caseId}">
+        <span class="kind ${a.type}">${a.type}</span>
+        <span class="what"><b>${esc(a.chamber)}</b><span>${esc(a.lot_id)}, ${val}</span></span>
+        <span class="dot ${dot}" title="${run ? esc(dot.replace("_", " ")) : "not investigated"}"></span>
+      </button>`;
+    }
+  }
+  $("#list").innerHTML = html;
+  for (const b of document.querySelectorAll(".alarm-row")) b.onclick = () => selectCase(b.dataset.case);
+}
+
+/* ---------------- selection ---------------- */
+async function selectCase(id) {
+  state.caseId = id;
+  state.showTruth = false;
+  renderList();
+  state.ctx = await api(`/api/context?case=${id}`);
+  await loadRun();
+}
+async function loadRun() {
+  const data = await api(`/api/run?method=${state.method}&case=${state.caseId}`);
+  state.run = data.run;
+  renderTraveler(data.live);
+  renderSide();
+  clearTimeout(state.poll);
+  if (data.live || (state.run && state.run.live)) state.poll = setTimeout(loadRun, 1200);
+  else if (state.wasLive) { state.wasLive = false; loadCases(); }
+  if (data.live) state.wasLive = true;
+}
+
+/* ---------------- traveler ---------------- */
+function gauge(value, L, type) {
+  if (type === "FDC") return "";
+  const lo = L.lsl - 8, hi = L.usl + 8, W = 600;
+  const x = (v) => ((Math.min(Math.max(v, lo), hi) - lo) / (hi - lo)) * W;
+  return `<svg class="gauge" viewBox="0 0 ${W} 34" width="100%" height="34" role="img" aria-label="Reading against limits">
+    <rect x="0" y="12" width="${W}" height="10" fill="var(--hold-soft)"/>
+    <rect x="${x(L.lsl)}" y="12" width="${x(L.usl) - x(L.lsl)}" height="10" fill="var(--amber-soft)"/>
+    <rect x="${x(L.lcl)}" y="12" width="${x(L.ucl) - x(L.lcl)}" height="10" fill="var(--release-soft)"/>
+    <line x1="${x(L.target)}" x2="${x(L.target)}" y1="10" y2="24" stroke="var(--muted)"/>
+    <text x="${x(L.lsl)}" y="34" text-anchor="middle">LSL ${L.lsl}</text>
+    <text x="${x(L.usl)}" y="34" text-anchor="middle">USL ${L.usl}</text>
+    <text x="${x(L.target)}" y="8" text-anchor="middle">target</text>
+    <path d="M${x(value) - 6},4 L${x(value) + 6},4 L${x(value)},12 Z" fill="var(--ink)"/>
+    <line x1="${x(value)}" x2="${x(value)}" y1="12" y2="22" stroke="var(--ink)" stroke-width="2"/>
+  </svg>`;
+}
+
+function finding(s) {
+  const r = s.result || {}, a = s.args || {};
+  if (r.error) return `<span class="soft">Refused: ${esc(r.error)}</span>`;
+  switch (s.tool) {
+    case "get_alarm": return `${esc(r.alarm.type)} on ${esc(r.alarm.chamber)}, read ${fmt(r.alarm.value)} on ${esc(r.alarm.met_tool || r.alarm.parameter)}.`;
+    case "get_lot_history": return `${esc(r.lot_id)} went ${esc(r.clean_tool)}, then ${esc(r.chamber)}${r.met_tool ? ", then " + esc(r.met_tool) : ""}. ${r.wafers_since_pm_on_chamber} wafers since PM on that chamber.`;
+    case "query_lots": return `${r.n} lots${a.chamber ? " on " + esc(a.chamber) : ""}${a.clean_tool ? " from " + esc(a.clean_tool) : ""}${a.met_tool ? " measured on " + esc(a.met_tool) : ""} in the last ${a.window_hours || 12} h.`;
+    case "get_chamber_summary": {
+      const rows = Object.entries(r.chambers).map(([c, v]) =>
+        `<tr><td>${esc(c)}</td><td class="${v.mean_A > 507 ? "hi" : ""}">${v.mean_A !== undefined ? fmt(v.mean_A) : "no data"}</td><td>${v.n_ooc ?? 0} OOC</td><td>${esc(v.hours_since_last_pm)} h since PM</td></tr>`).join("");
+      return `<table class="mini"><tr><th>Chamber</th><th>Mean, Å</th><th></th><th></th></tr>${rows}</table>`;
+    }
+    case "get_trend": {
+      let t = `${esc(r.signal)} on ${esc(r.chamber)}: ${r.n_points} points, last ${fmt(r.last_value)}.`;
+      if (r.mean_before_pm != null && r.mean_after_pm != null) t += ` Before PM ${fmt(r.mean_before_pm)}, after ${fmt(r.mean_after_pm)}.`;
+      return t;
+    }
+    case "run_commonality": {
+      const rows = Object.entries(r.steps).map(([st, v]) =>
+        `<tr><td>${st}</td><td class="${v.anova_p_value !== null && v.anova_p_value < 0.01 ? "hi" : ""}">p = ${v.anova_p_value ?? "n/a"}</td><td>most off: ${esc(v.most_deviant_tool)}</td></tr>`).join("");
+      return `<table class="mini">${rows}</table>`;
+    }
+    case "get_fdc_summary": {
+      const off = Object.entries(r.parameters).filter(([, v]) => Math.abs(v.z_score) >= 3);
+      const p = off.length ? off.map(([k, v]) => `${esc(k)} ${v.delta > 0 ? "+" : ""}${v.delta} (z ${v.z_score})`).join(", ") : "all sensors near baseline";
+      return `${esc(r.chamber)}, last ${r.recent_hours} h: ${p}. ${r.recent_measured_wafers.length} measured wafers in that window.`;
+    }
+    case "get_pm_log": return `${r.events.length} PM events${a.chamber ? " on " + esc(a.chamber) : ""}; latest at ${r.events.length ? r.events[r.events.length - 1].time_h + " h" : "none"}.`;
+    case "request_measurement": return `${esc(r.lot_id)} on ${esc(r.met_tool)}: <b>${fmt(r.mean_A)} Å</b>, ${r.in_spec ? "in spec" : "out of spec"}. Adds ${r.lot_delay_added_h} h of lot delay.`;
+    case "get_wafer_map": return `${esc(r.lot_id)}: ${esc((r.pattern || "").replace("_", " "))} pattern, segmented by ${esc(r.segmenter)}.`;
+    default: return "";
+  }
+}
+
+function renderTraveler(live) {
+  const c = state.cases.find((x) => x.case_id === state.caseId);
+  if (!c) { $("#traveler").innerHTML = `<p class="empty">Pick an alarm on the left to see how it was investigated.</p>`; return; }
+  const a = c.alarm, L = state.ctx.limits, run = state.run;
+  const reading = a.type === "FDC" ? `${fmt(a.value, 1)}<small>°C</small>` : `${fmt(a.value)}<small>Å</small>`;
+  const methodBtns = Object.entries(METHOD_NAMES).map(([m, n]) => `<button aria-pressed="${m === state.method}" data-m="${m}">${n}</button>`).join("");
+  const canRun = state.method === "agent" && state.liveEnabled && !live;
+  let html = `<div class="alarm-head">
+      <div><h1>${esc(a.chamber)}, ${esc(a.lot_id)}</h1>
+      <div class="sub">${a.type === "FDC" ? "FDC alarm, " + esc(a.parameter) : esc(a.rule)}. Raised at ${a.time_h} h by ${esc(a.alarm_id)}.</div></div>
+      <div class="reading"><div class="num">${reading}</div></div>
+      ${gauge(a.value, L, a.type)}
+    </div>
+    <div class="methods"><div class="seg" role="group" aria-label="Who investigated">${methodBtns}</div>
+      ${state.method === "agent" ? `<button class="btn ghost" id="runlive" ${canRun ? "" : "disabled"}>${live ? "Investigating…" : run ? "Investigate again" : "Investigate live"}</button>` : ""}
+      ${state.method === "agent" && !state.liveEnabled ? `<span class="note">Add MODEL_API_KEY to .env to run live.</span>` : ""}
+    </div>`;
+  if (!run) {
+    html += `<p class="empty">${live ? "Starting the investigation…" : `No ${METHOD_NAMES[state.method].toLowerCase()} run for this alarm yet.`}</p>`;
+    $("#traveler").innerHTML = html;
+    bindTraveler();
+    return;
+  }
+  const notesAt = {};
+  for (const n of run.notes || []) (notesAt[n.step ?? n.turn] ||= []).push(n.text);
+  const evStep = {};
+  html += `<ol class="route">`;
+  run.trace.forEach((s, i) => {
+    const n = i + 1, r = s.result || {};
+    if (r.evidence_id) evStep[r.evidence_id] = n;
+    const thought = (notesAt[n] || []).map((t) => `<div class="thought">${esc(t)}</div>`).join("");
+    if (s.tool === "submit_disposition") {
+      if (r.accepted) {
+        html += `<li class="step final" id="step-${n}"><span class="n">${n}</span><div class="body">${thought}
+          <div class="title"><b>Filed a disposition</b><span class="soft">passed the verifier</span></div>${disposition(s.args, evStep)}</div></li>`;
+      } else {
+        const probs = (r.problems || []).map((p) => `<li>${esc(p.replace(/^rule: /, ""))}</li>`).join("");
+        html += `<li class="step refused" id="step-${n}"><span class="n">${n}</span><div class="body">${thought}
+          <div class="title"><b>Verifier refused the disposition</b></div><ul>${probs}</ul>
+          <details class="raw"><summary>What the agent tried to file</summary><pre>${esc(JSON.stringify(s.args, null, 1))}</pre></details></div></li>`;
+      }
+      return;
+    }
+    const label = s.tool === "get_trend" ? `Pulled ${esc(s.args.signal)} on ${esc(s.args.chamber)}` : TOOL_NAMES[s.tool] || s.tool;
+    html += `<li class="step" id="step-${n}"><span class="n">${n}</span><div class="body">${thought}
+      <div class="title"><b>${label}</b>${r.evidence_id ? `<span class="chip" data-step="${n}">${r.evidence_id}</span>` : ""}</div>
+      <div class="finding">${finding(s)}</div>
+      <details class="raw"><summary>Raw result</summary><pre>${esc(JSON.stringify(r, null, 1))}</pre></details></div></li>`;
+  });
+  html += `</ol>`;
+  if (live) html += `<p class="empty">Investigating…</p>`;
+  if (run.status === "needs_engineer") html += `<p class="empty">Refused three times. This alarm goes to an engineer.</p>`;
+  if (run.status === "turn_limit" || run.status === "error") html += `<p class="empty">Stopped before filing (${esc(run.status.replace("_", " "))}${run.error ? ": " + esc(run.error) : ""}).</p>`;
+  if (run.status === "awaiting_signoff" && !live) html += signoffBlock(run);
+  if ((run.history || []).length) {
+    html += `<div class="history">Earlier dispositions for this alarm: ${run.history.map((h) =>
+      `${esc(CAUSES[h.disposition.cause] || h.disposition.cause)}${h.signoff ? ", " + esc(h.signoff.decision) + "d" + (h.signoff.note ? ` ("${esc(h.signoff.note)}")` : "") : ""}`).join("; ")}.</div>`;
+  }
+  $("#traveler").innerHTML = html;
+  bindTraveler();
+}
+
+function disposition(d, evStep) {
+  const acts = d.actions.map((x) => `<span class="act ${esc(x.type)}">${ACTIONS[x.type] || esc(x.type)}: ${esc(x.target)}</span>`).join("");
+  const claims = d.claims.map((c) => `<li><span><span class="chip" data-step="${evStep[c.evidence_id] || ""}">${esc(c.evidence_id)}</span></span><span>${esc(c.statement)}</span></li>`).join("");
+  return `<div class="disposition"><div class="cause">${esc(CAUSES[d.cause] || d.cause)}</div>
+    <div class="actions">${acts}</div><ul class="claims">${claims}</ul><p class="summary">${esc(d.summary)}</p></div>`;
+}
+
+function signoffBlock(run) {
+  if (run.signoff) {
+    const s = run.signoff;
+    return `<div class="signoff"><span class="stamp ${s.decision}">${s.decision === "approve" ? "Approved" : "Rejected"}</span>
+      <span class="soft"> ${esc(s.at)}${s.note ? `: ${esc(s.note)}` : ""}</span></div>`;
+  }
+  const reject = state.method === "agent" ? "Reject and send back" : "Reject";
+  return `<div class="signoff"><b>Engineer sign-off</b>
+    <textarea id="signnote" placeholder="Note for the record. If you reject, the agent gets this note and investigates again."></textarea>
+    <div class="row"><button class="btn approve" id="approve">Approve</button><button class="btn reject" id="reject">${reject}</button></div></div>`;
+}
+
+function bindTraveler() {
+  for (const b of document.querySelectorAll(".seg button")) b.onclick = () => { state.method = b.dataset.m; loadRun(); };
+  const live = $("#runlive");
+  if (live) live.onclick = async () => {
+    const r = await api("/api/live", { case: state.caseId });
+    if (r.error) alertBar(r.error);
+    state.run = null; loadRun();
+  };
+  for (const chip of document.querySelectorAll(".chip[data-step]")) chip.onclick = () => {
+    const el = document.getElementById("step-" + chip.dataset.step);
+    if (!el) return;
+    el.scrollIntoView({ behavior: "smooth", block: "center" });
+    el.classList.add("flash"); setTimeout(() => el.classList.remove("flash"), 1200);
+  };
+  const ap = $("#approve"), rj = $("#reject");
+  const send = async (decision) => {
+    const note = $("#signnote").value;
+    if (decision === "reject" && state.method === "agent" && !note.trim()) { $("#signnote").focus(); $("#signnote").placeholder = "Write what the agent got wrong, so it can investigate again."; return; }
+    const r = await api("/api/signoff", { method: state.method, case: state.caseId, decision, note });
+    if (r.error) alertBar(r.error);
+    if (r.rerun && r.rerun.error) alertBar(r.rerun.error);
+    await loadCases(); loadRun();
+  };
+  if (ap) ap.onclick = () => send("approve");
+  if (rj) rj.onclick = () => send("reject");
+}
+function alertBar(msg) {
+  const p = document.createElement("p"); p.className = "empty"; p.textContent = msg;
+  $("#traveler").prepend(p); setTimeout(() => p.remove(), 6000);
+}
+
+/* ---------------- side panel ---------------- */
+function chart(ctx) {
+  const W = 320, H = 190, P = { l: 34, r: 8, t: 10, b: 22 }, L = ctx.limits;
+  const vals = ctx.points.map((p) => p.v).concat([L.lsl, L.usl]);
+  const lo = Math.min(...vals) - 2, hi = Math.max(...vals) + 2;
+  const [t0, t1] = ctx.window;
+  const x = (t) => P.l + ((t - t0) / (t1 - t0)) * (W - P.l - P.r);
+  const y = (v) => P.t + (1 - (v - lo) / (hi - lo)) * (H - P.t - P.b);
+  const hl = (v, color, dash, label) => `<line x1="${P.l}" x2="${W - P.r}" y1="${y(v)}" y2="${y(v)}" stroke="${color}" stroke-dasharray="${dash}"/><text x="${P.l - 4}" y="${y(v) + 3}" text-anchor="end">${label}</text>`;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Wafer means over the last 24 hours">`;
+  s += hl(L.usl, "var(--hold)", "4 3", L.usl) + hl(L.lsl, "var(--hold)", "4 3", L.lsl) + hl(L.ucl, "var(--amber)", "2 3", L.ucl) + hl(L.lcl, "var(--amber)", "2 3", L.lcl) + hl(L.target, "var(--line)", "", L.target);
+  for (const t of ctx.pm) s += `<line x1="${x(t)}" x2="${x(t)}" y1="${P.t}" y2="${H - P.b}" stroke="var(--slate)" stroke-dasharray="3 3"/><text x="${x(t) + 3}" y="${P.t + 9}" text-anchor="start">PM</text>`;
+  for (const p of ctx.points.filter((p) => p.chamber !== ctx.chamber)) s += `<circle cx="${x(p.t)}" cy="${y(p.v)}" r="2.2" fill="var(--line)"/>`;
+  const mine = ctx.points.filter((p) => p.chamber === ctx.chamber);
+  s += `<polyline fill="none" stroke="var(--ink)" stroke-width="1" points="${mine.map((p) => `${x(p.t)},${y(p.v)}`).join(" ")}"/>`;
+  for (const p of mine) s += `<circle cx="${x(p.t)}" cy="${y(p.v)}" r="3" fill="var(--ink)"><title>${p.lot}: ${p.v} (${p.met})</title></circle>`;
+  const last = mine[mine.length - 1];
+  if (last && ctx.alarm.type !== "FDC" && last.lot === ctx.alarm.lot_id) s += `<circle cx="${x(last.t)}" cy="${y(last.v)}" r="6.5" fill="none" stroke="var(--hold)" stroke-width="2"/>`;
+  s += `<text x="${P.l}" y="${H - 6}">−24 h</text><text x="${W - P.r}" y="${H - 6}" text-anchor="end">now</text></svg>`;
+  return s;
+}
+function heaterChart(ctx) {
+  const W = 320, H = 90, P = { l: 34, r: 8, t: 8, b: 16 };
+  const vs = ctx.heater.map((p) => p.v), lo = Math.min(...vs) - 1, hi = Math.max(...vs) + 1, [t0, t1] = ctx.window;
+  const x = (t) => P.l + ((t - t0) / (t1 - t0)) * (W - P.l - P.r), y = (v) => P.t + (1 - (v - lo) / (hi - lo)) * (H - P.t - P.b);
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Heater temperature readings">
+    <polyline fill="none" stroke="var(--slate)" stroke-width="1.5" points="${ctx.heater.map((p) => `${x(p.t)},${y(p.v)}`).join(" ")}"/>
+    <text x="${P.l - 4}" y="${y(hi - 1) + 3}" text-anchor="end">${(hi - 1).toFixed(0)}</text><text x="${P.l - 4}" y="${y(lo + 1) + 3}" text-anchor="end">${(lo + 1).toFixed(0)}</text></svg>`;
+}
+
+function renderSide() {
+  const ctx = state.ctx, run = state.run;
+  if (!ctx) { $("#side").innerHTML = ""; return; }
+  let html = `<section><h2>${esc(ctx.chamber)}, wafer means, last 24 h</h2>${chart(ctx)}
+    <div class="cap">Black: ${esc(ctx.chamber)}. Grey: other chambers. Dashed red: spec. Dotted amber: control limits.</div></section>`;
+  if (ctx.alarm.type === "FDC") html += `<section><h2>${esc(ctx.chamber)} heater temperature, °C</h2>${heaterChart(ctx)}<div class="cap">What the sensor reports, run by run.</div></section>`;
+  const maps = [];
+  if (ctx.alarm.type !== "FDC") maps.push({ src: `/api/wafer.png?case=${state.caseId}&lot=${ctx.alarm.lot_id}`, cap: `${ctx.alarm.lot_id}, as measured at the alarm` });
+  for (const s of (run && run.trace) || []) {
+    if (s.tool === "get_wafer_map" && s.result && s.result.image) {
+      maps.push({ src: `/runs/${state.method}/${state.caseId}/${s.result.image}`, cap: `${s.result.lot_id}, ${String(s.result.pattern).replace("_", " ")} (${s.result.segmenter})` });
+    }
+  }
+  if (maps.length) html += `<section><h2>Wafer maps</h2><div class="maps">${maps.map((m) => `<figure><img src="${m.src}" alt="Thickness map, red where thicker than the wafer's own mean"><figcaption>${esc(m.cap)}</figcaption></figure>`).join("")}</div>
+    <div class="cap">Red: more than 3 Å thicker than the wafer's own mean.</div></section>`;
+  if (run) {
+    const c = run.costs || {};
+    html += `<section><h2>What it cost</h2><div class="costs">
+      <span>Tool calls</span><span>${c.tool_calls ?? "–"}</span>
+      <span>Measurements</span><span>${c.measurements ?? 0}</span>
+      <span>Lot delay</span><span>${c.lot_delay_h ?? 0} h</span>
+      <span>Disposition attempts</span><span>${c.disposition_tries ?? 0}</span>
+      ${run.tokens ? `<span>Tokens</span><span>${Number(run.tokens).toLocaleString()}</span>` : ""}
+      ${run.model ? `<span>Model</span><span>${esc(run.model)}</span>` : ""}</div></section>`;
+    if (run.truth) {
+      const sc = run.score || {};
+      html += `<section><h2>Ground truth</h2>${state.showTruth
+        ? `<div class="truth"><b>${esc(CAUSES[run.truth.cause])}.</b> ${esc(run.truth.explanation)}
+            ${run.truth.confounder ? `<div class="cap">Planted distraction: ${esc(run.truth.confounder)}.</div>` : ""}
+            ${sc.decision_correct !== undefined ? `<p>${sc.decision_correct ? "The decision matches." : "The decision does not match."}</p>` : ""}</div>`
+        : `<button class="btn ghost" id="reveal">Show what really happened</button><div class="cap">Hidden from the agent and the tools. Only for review.</div>`}</section>`;
+    }
+  }
+  $("#side").innerHTML = html;
+  const rv = $("#reveal");
+  if (rv) rv.onclick = () => { state.showTruth = true; renderSide(); };
+}
+
+/* ---------------- benchmark ---------------- */
+async function renderBench() {
+  const data = await api("/api/benchmark");
+  const keys = [["decision_accuracy", "Right decision", (v) => Math.round(v * 100) + "%"], ["missed_faults", "Missed real faults"], ["needless_holds", "Needless holds"], ["avg_tool_calls", "Tool calls"], ["avg_measurements", "Measurements"], ["avg_lot_delay_h", "Lot delay, h"]];
+  let html = `<h1>Benchmark</h1><p class="lead">Every method investigates the same simulated alarms through the same tools and the same verifier. The development set was used while building the agent; the held-out set was run once at the end.</p>`;
+  for (const [split, title] of [["holdout", "Held-out alarms"], ["dev", "Development alarms"]]) {
+    const ms = Object.keys(data[split] || {});
+    if (!ms.length) { html += `<h2>${title}</h2><p class="lead">Not run yet.</p>`; continue; }
+    html += `<h2>${title} (${data[split][ms[0]].summary.n})</h2><table class="sum"><tr><th>Method</th>${keys.map((k) => `<th>${k[1]}</th>`).join("")}</tr>`;
+    for (const m of ["agent", "playbook", "always_hold"].filter((m) => data[split][m])) {
+      const s = data[split][m].summary;
+      html += `<tr class="${m}"><td>${METHOD_NAMES[m]}</td>${keys.map(([k, , f], i) => `<td>${i === 0 ? `<span class="bar" style="width:${s[k] * 80}px"></span>` : ""}${f ? f(s[k]) : s[k]}</td>`).join("")}</tr>`;
+    }
+    html += `</table>`;
+    const byCase = {};
+    for (const m of ms) for (const r of data[split][m].rows) (byCase[r.case_id] ||= {})[m] = r.decision_correct;
+    const order = data[split][ms.reduce((a, b) => (data[split][a].rows.length >= data[split][b].rows.length ? a : b))].rows.map((r) => r.case_id);
+    const scen = [...new Set(order.map((k) => k.replace(/-\d+$/, "")))];
+    const seeds = [...new Set(Object.keys(byCase).map((k) => k.match(/-(\d+)$/)[1]))].sort();
+    html += `<div class="legend">Each cell: playbook, then agent. Green is the right decision, red is wrong.</div><table class="grid"><tr><th>Scenario</th>${seeds.map((s) => `<th>Seed ${s}</th>`).join("")}</tr>`;
+    for (const sc of scen) {
+      html += `<tr><td>${sc.replace(/_/g, " ")}</td>${seeds.map((sd) => {
+        const r = byCase[`${sc}-${sd}`] || {};
+        const sq = (v) => `<span class="sq ${v === undefined ? "" : v ? "ok" : "bad"}"></span>`;
+        return `<td><span class="cell">${sq(r.playbook)}${sq(r.agent)}</span></td>`;
+      }).join("")}</tr>`;
+    }
+    html += `</table>`;
+  }
+  $("#bench").innerHTML = html;
+}
+
+for (const t of document.querySelectorAll("nav.tabs button")) t.onclick = () => {
+  for (const o of document.querySelectorAll("nav.tabs button")) o.setAttribute("aria-selected", o === t);
+  const bench = t.dataset.view === "bench";
+  $("#console").hidden = bench; $("#bench").hidden = !bench;
+  if (bench) renderBench();
+};
+loadCases().then(() => selectCase(state.cases[0].case_id));
+</script>
+</body>
+</html>

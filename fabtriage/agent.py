@@ -64,21 +64,31 @@ How to work
 - Every result has an evidence_id. In submit_disposition each claim cites one evidence_id, and every
   number in a claim must be copied exactly from that evidence. Don't compute new numbers in claims.
 - If a disposition is refused, read the problems, collect what is missing, and submit again.
+- Write claims and the summary in plain words an engineer can read in seconds ("DEP01-B mean after PM is
+  514.19 vs 501.99 before"), not field names like mean_after_pm.
 """
 
 
-def _kickoff(inv: Investigation) -> str:
+def _kickoff(inv: Investigation, engineer_note: str | None = None) -> str:
     a = inv.case.alarm
-    return f"Alarm {a['alarm_id']} ({a['type']}) just fired on {a['chamber']} for {a['lot_id']}. Investigate and submit a disposition."
+    text = f"Alarm {a['alarm_id']} ({a['type']}) just fired on {a['chamber']} for {a['lot_id']}. Investigate and submit a disposition."
+    if engineer_note:
+        text += (
+            "\n\nAn engineer rejected an earlier disposition for this alarm with this note. "
+            f"Take it into account: {engineer_note}"
+        )
+    return text
 
 
-def run_agent(inv: Investigation, client, backend: str | None = None, max_turns: int | None = None) -> dict:
+def run_agent(
+    inv: Investigation, client, backend: str | None = None, max_turns: int | None = None, engineer_note: str | None = None
+) -> dict:
     backend = backend or os.environ.get("AGENT_BACKEND", "meta")
     max_turns = max_turns or MAX_TURNS
     api = BACKENDS[backend]["api"]
     model = model_for(backend)
     run = _responses if api == "responses" else _chat
-    tokens, notes, error = run(inv, client, model, max_turns)
+    tokens, notes, error = run(inv, client, model, max_turns, engineer_note)
     if inv.status == "running":
         inv.status = "error" if error else "turn_limit"
     return {"backend": backend, "model": model, "tokens": tokens, "notes": notes, "error": error}
@@ -101,10 +111,10 @@ def _last_turn_nudge(turn: int, max_turns: int) -> str | None:
     return None
 
 
-def _responses(inv: Investigation, client, model: str, max_turns: int):
+def _responses(inv: Investigation, client, model: str, max_turns: int, engineer_note=None):
     tools = [{"type": "function", **d} for d in DEFINITIONS]
-    messages: list = [{"role": "user", "content": _kickoff(inv)}]
-    tokens, notes = 0, []
+    messages: list = [{"role": "user", "content": _kickoff(inv, engineer_note)}]
+    tokens, notes = 0, inv.notes
     for turn in range(max_turns):
         nudge = _last_turn_nudge(turn, max_turns)
         if nudge:
@@ -127,7 +137,7 @@ def _responses(inv: Investigation, client, model: str, max_turns: int):
         messages += response.output
         text = getattr(response, "output_text", "") or ""
         if text.strip():
-            notes.append({"turn": turn + 1, "text": text.strip()})
+            notes.append({"turn": turn + 1, "step": len(inv.trace) + 1, "text": text.strip()})
         calls = [item for item in response.output if getattr(item, "type", None) == "function_call"]
         if not calls:
             messages.append({"role": "user", "content": "Plain text is not accepted. Call exactly one tool."})
@@ -140,10 +150,10 @@ def _responses(inv: Investigation, client, model: str, max_turns: int):
     return tokens, notes, None
 
 
-def _chat(inv: Investigation, client, model: str, max_turns: int):
+def _chat(inv: Investigation, client, model: str, max_turns: int, engineer_note=None):
     tools = [{"type": "function", "function": d} for d in DEFINITIONS]
-    messages: list = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": _kickoff(inv)}]
-    tokens, notes = 0, []
+    messages: list = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": _kickoff(inv, engineer_note)}]
+    tokens, notes = 0, inv.notes
     for turn in range(max_turns):
         nudge = _last_turn_nudge(turn, max_turns)
         if nudge:
@@ -158,7 +168,7 @@ def _chat(inv: Investigation, client, model: str, max_turns: int):
         tokens += int(getattr(usage, "total_tokens", 0) or 0)
         msg = response.choices[0].message
         if (msg.content or "").strip():
-            notes.append({"turn": turn + 1, "text": msg.content.strip()})
+            notes.append({"turn": turn + 1, "step": len(inv.trace) + 1, "text": msg.content.strip()})
         calls = list(msg.tool_calls or [])
         assistant = {"role": "assistant", "content": msg.content or ""}
         if calls:

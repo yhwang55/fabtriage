@@ -77,6 +77,14 @@ python -m fabtriage compare --split dev
 
 Each run writes `runs/<method>/<case>/run.json` with the full trace, refusals, costs and the score.
 
+## Console
+
+```bash
+python -m fabtriage serve     # http://127.0.0.1:8770
+```
+
+Pick an alarm and watch the investigation step by step: each tool call with its evidence id, the agent's reasoning, verifier refusals, the final disposition with every claim linked back to its evidence, the chamber's SPC chart and the SAM-segmented wafer maps. An engineer approves the disposition, or rejects it with a note and the agent investigates again with that note. The Benchmark tab compares the agent with the baselines.
+
 ## Scope note
 
 This is a simplified, simulated fab. Process numbers are illustrative, not from any real fab. The scenarios follow failure modes that practicing fab data scientists described, but the simulator is not calibrated to production data.

@@ -5,6 +5,7 @@
     python -m fabtriage eval --method agent --split dev --backend meta --limit 3
     python -m fabtriage run --case pm_shift-1 --method agent
     python -m fabtriage compare --split dev
+    python -m fabtriage serve            # the console at http://127.0.0.1:8770
 """
 
 from __future__ import annotations
@@ -43,6 +44,11 @@ def main(argv=None) -> None:
     r.add_argument("--case", required=True)
     r.add_argument("--method", default="agent", choices=["agent", "playbook", "always_hold"])
     r.add_argument("--backend", default="meta", choices=["meta", "baseten"])
+    rs = sub.add_parser("rescore", help="rebuild a results file from saved runs")
+    rs.add_argument("--method", required=True, choices=["agent", "playbook", "always_hold"])
+    rs.add_argument("--split", default="dev", choices=["dev", "holdout", "all"])
+    sv = sub.add_parser("serve")
+    sv.add_argument("--port", type=int, default=8770)
     cmp_ = sub.add_parser("compare")
     cmp_.add_argument("--split", default="dev")
     args = p.parse_args(argv)
@@ -63,6 +69,12 @@ def main(argv=None) -> None:
         row = evaluate.run_one(args.method, args.case, RUNS, client, args.backend, sam)
         print(json.dumps(row, indent=2))
         print(f"trace: {RUNS / args.method / args.case / 'run.json'}")
+    elif args.cmd == "rescore":
+        print(json.dumps(evaluate.rescore(args.method, args.split, RUNS)["summary"], indent=2))
+    elif args.cmd == "serve":
+        from .server import serve
+
+        serve(args.port)
     elif args.cmd == "compare":
         rows = []
         for path in sorted(RUNS.glob(f"results_*_{args.split}.json")):

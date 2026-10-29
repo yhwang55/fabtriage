@@ -206,6 +206,9 @@ class Investigation:
         self.status = "running"
         self.disposition = None
         self.refusals: list = []
+        self.notes: list = []  # the agent's visible reasoning, {"step": n, "text": ...}
+        self.autosave = False  # write run.json after every tool call (live view in the console)
+        self.live_extra: dict = {}
 
     # ---------------------------------------------------------------- dispatch
     def call(self, name: str, args: dict) -> dict:
@@ -227,6 +230,8 @@ class Investigation:
             result = {"evidence_id": eid, **result}
             self.evidence[eid] = {"tool": name, "args": args, "result": result}
         self.trace.append({"tool": name, "args": args, "result": result})
+        if self.autosave:
+            self.save(self.live_extra)
         return result
 
     def costs(self) -> dict:
@@ -497,6 +502,7 @@ class Investigation:
             "refusals": self.refusals,
             "costs": self.costs(),
             "trace": self.trace,
+            "notes": self.notes,
             "truth": self.case.truth,  # stored for review only; never shown to the agent
             **(extra or {}),
         }

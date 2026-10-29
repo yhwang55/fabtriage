@@ -64,16 +64,28 @@ def summarize(rows: list) -> dict:
     }
 
 
-def run_one(method: str, case_id: str, runs_dir: Path, client=None, backend=None, sam_client=None) -> dict:
+def run_one(
+    method: str,
+    case_id: str,
+    runs_dir: Path,
+    client=None,
+    backend=None,
+    sam_client=None,
+    engineer_note=None,
+    autosave=False,
+    keep: dict | None = None,
+) -> dict:
     case = sim.load(case_id)
     run_dir = runs_dir / method / case_id
     inv = Investigation(case, run_dir, client=sam_client if method == "agent" else None)
-    extra = {}
+    inv.autosave = autosave
+    inv.live_extra = {"method": method, "live": True, **(keep or {})}
+    extra = dict(keep or {})
     t0 = time.time()
     if method == "agent":
         from .agent import run_agent
 
-        extra = run_agent(inv, client, backend=backend)
+        extra.update(run_agent(inv, client, backend=backend, engineer_note=engineer_note))
     else:
         from .baselines import BASELINES
 
@@ -103,8 +115,33 @@ def run_split(
             flush=True,
         )
         rows.append(row)
-    result = {"method": method, "split": split, "summary": summarize(rows), "rows": rows}
+    return write_results(method, split, runs_dir, rows)
+
+
+def write_results(method: str, split: str, runs_dir: Path, rows: list, fresh: bool = False) -> dict:
+    """Merge rows into results_<method>_<split>.json: a partial rerun replaces only its own cases."""
     out = runs_dir / f"results_{method}_{split}.json"
+    merged = {}
+    if out.exists() and not fresh:
+        for r in json.loads(out.read_text()).get("rows", []):
+            merged[r["case_id"]] = r
+    for r in rows:
+        merged[r["case_id"]] = r
+    order = sim.benchmark(split)
+    all_rows = [merged[c] for c in order if c in merged]
+    result = {"method": method, "split": split, "summary": summarize(all_rows), "rows": all_rows}
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(result, indent=2))
     return result
+
+
+def rescore(method: str, split: str, runs_dir: Path) -> dict:
+    """Rebuild the results file from the saved run.json files."""
+    rows = []
+    for cid in sim.benchmark(split):
+        path = runs_dir / method / cid / "run.json"
+        if path.exists():
+            score = json.loads(path.read_text()).get("score")
+            if score:
+                rows.append(score)
+    return write_results(method, split, runs_dir, rows, fresh=True)
