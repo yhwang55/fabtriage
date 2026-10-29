@@ -161,6 +161,7 @@ details.raw pre { font-size: 12px; background: var(--paper); padding: 8px; borde
 .verdict details summary { color: var(--slate); cursor: pointer; font-size: 14px; width: fit-content; margin-top: 4px; }
 .verdict .vmeta { color: var(--muted); font-size: 13px; margin-top: 10px; }
 .verdict .signoff { margin-top: 12px; }
+.nextstep { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
 .routehead { font: 600 17px var(--head); margin: 26px 0 0; color: var(--slate); }
 .linkbtn { border: 0; background: none; padding: 0; color: var(--slate); text-decoration: underline; cursor: pointer; font-size: 14px; }
 
@@ -801,8 +802,16 @@ function verdictCard(run, evStep, withSignoff, live) {
     <div class="vmeta">${KO()
       ? `도구 호출 ${c.tool_calls}번, 추가 측정 ${c.measurements}번 (lot 지연 ${c.lot_delay_h}시간). ${verifier} 요약과 근거는 에이전트가 쓴 영어 원문입니다.`
       : `${c.tool_calls} tool calls, ${c.measurements} extra measurement${c.measurements === 1 ? "" : "s"} (${c.lot_delay_h} h of lot delay). ${verifier}`}</div>
+    ${nextStep(d)}
     ${withSignoff ? signoffBlock(run) : ""}
   </section>`;
+}
+const LINKED = ["pm_shift-1", "pm_shift-2", "pm_shift-3", "pm_shift-4"];
+function nextStep(d) {
+  const chamber = (d.actions.find((x) => x.type === "hold_chamber") || {}).target;
+  if (!chamber || !LINKED.includes(state.caseId) || state.method === "compare") return "";
+  return `<div class="nextstep"><b>${L("Next:", "다음 단계:")}</b> ${L(`${esc(chamber)} is held after PM. Bring it back to target.`, `${esc(chamber)}가 PM 뒤 홀드되었습니다. 목표 두께로 되돌립니다.`)}
+    <button class="btn" data-recover="rec_after_${state.caseId}">${L("Open the recovery", "복구 화면 열기")}</button></div>`;
 }
 
 function disposition(d, evStep) {
@@ -847,6 +856,12 @@ function bindTraveler() {
       const steps = document.querySelectorAll("ol.route li");
       if (steps.length) steps[steps.length - 1].scrollIntoView({ behavior: "smooth", block: "nearest" });
     }, 1300);
+  };
+  for (const b of document.querySelectorAll("[data-recover]")) b.onclick = async () => {
+    showView("recovery");
+    if (!rstate.loaded) await loadRecovery();
+    rstate.method = "agent";
+    selectRec(b.dataset.recover);
   };
   for (const b of document.querySelectorAll("[data-top]")) b.onclick = () => document.querySelector(".verdict")?.scrollIntoView({ behavior: "smooth", block: "start" });
   for (const chip of document.querySelectorAll(".chip[data-step]")) chip.onclick = () => {
@@ -1045,7 +1060,7 @@ async function renderBench() {
 
 /* ---------------- recovery after PM ---------------- */
 const REC_NAMES = {
-  agent: ["Agent", "에이전트"], monitor_rule: ["Two monitor wafers", "모니터 웨이퍼 2장 규칙"],
+  agent: ["Agent", "에이전트"], agent_baseten: ["Agent, open model", "에이전트 (오픈 모델)"], monitor_rule: ["Two monitor wafers", "모니터 웨이퍼 2장 규칙"],
   reset_recipe: ["Baseline recipe", "기준 레시피 복귀"], keep_recipe: ["Keep the recipe", "레시피 유지"],
 };
 const REC_TOOLS = {
@@ -1076,7 +1091,7 @@ async function loadRecovery() {
   if (!rstate.caseId && rstate.cases.length) selectRec(rstate.cases[0].case_id);
 }
 function renderRecList() {
-  const groups = KO() ? { dev: "개발 세트", holdout: "평가 세트", holdout2: "새 평가 세트" } : { dev: "Development", holdout: "Held-out", holdout2: "Fresh held-out" };
+  const groups = KO() ? { linked: "진단에서 이어진 복구", dev: "개발 세트", holdout: "평가 세트", holdout2: "새 평가 세트" } : { linked: "After a diagnosis", dev: "Development", holdout: "Held-out", holdout2: "Fresh held-out" };
   let html = "";
   for (const [split, label] of Object.entries(groups)) {
     html += `<div class="group">${label}</div>`;
@@ -1162,7 +1177,8 @@ function renderRec() {
   const run = rstate.run;
   const btns = Object.keys(REC_NAMES).map((m) => `<button aria-pressed="${m === rstate.method}" data-rm="${m}">${recName(m)}</button>`).join("");
   let html = `<div class="alarm-head"><div><h1>${L(`${esc(c.chamber)} after ${esc(c.pm.pm_id)}`, `${esc(c.chamber)}, ${esc(c.pm.pm_id)} 이후`)}</h1>
-      <div class="sub">${L(`Held after PM. Pre-PM recipe ${c.pre_pm_time_s} s. Bring it back to 500 Å and release it.`, `PM 뒤 홀드된 상태입니다. PM 전 레시피 ${c.pre_pm_time_s}초. 500 Å로 되돌려 생산에 내보내야 합니다.`)}</div></div></div>
+      <div class="sub">${L(`Held after PM. Pre-PM recipe ${c.pre_pm_time_s} s. Bring it back to 500 Å and release it.`, `PM 뒤 홀드된 상태입니다. PM 전 레시피 ${c.pre_pm_time_s}초. 500 Å로 되돌려 생산에 내보내야 합니다.`)}</div>
+      ${c.origin ? `<div class="sub">${L(`Held by the diagnosis of alarm ${esc(c.origin.alarm_id)}.`, `알람 ${esc(c.origin.alarm_id)} 진단에서 홀드된 챔버입니다.`)} <button class="linkbtn" data-diag="${esc(c.origin.case_id)}">${L("Open the diagnosis", "진단 화면 열기")}</button></div>` : ""}</div></div>
     <div class="methods"><div class="seg" role="group">${btns}</div></div>`;
   if (!run) {
     html += `<p class="empty">${L("No run for this method yet. Agent runs need the API key; see the README.", "이 방법은 아직 실행 기록이 없습니다. 에이전트 실행에는 API 키가 필요합니다 (README 참고).")}</p>`;
@@ -1187,6 +1203,7 @@ function renderRec() {
     html += `</ol>`;
   }
   $("#rtraveler").innerHTML = html;
+  for (const b of document.querySelectorAll("[data-diag]")) b.onclick = () => { state.method = "agent"; showView("console"); selectCase(b.dataset.diag); };
   for (const b of document.querySelectorAll("[data-rm]")) b.onclick = () => { rstate.method = b.dataset.rm; loadRec(); };
 }
 function recChart(run, base) {
@@ -1239,9 +1256,14 @@ function recBench(data) {
     const ms = Object.keys(rec[split] || {});
     if (!ms.length) continue;
     html += `<h2>${title}</h2><table class="sum"><tr><th>${L("Method", "방법")}</th>${cols.map((c) => `<th>${c[1]}</th>`).join("")}</tr>`;
-    for (const m of ["agent", "agent_baseten", "monitor_rule", "reset_recipe", "keep_recipe"].filter((m) => rec[split][m])) {
+    const ABL = {
+      "agent_hide-history": [L("Agent, earlier PMs hidden", "에이전트, 이전 PM 이력 숨김")],
+      "agent_hide-pm_detail": [L("Agent, PM details hidden", "에이전트, PM 작업 내용 숨김")],
+      "agent_hide-history-pm_detail": [L("Agent, both hidden", "에이전트, 둘 다 숨김")],
+    };
+    for (const m of ["agent", "agent_baseten", ...Object.keys(ABL), "monitor_rule", "reset_recipe", "keep_recipe"].filter((m) => rec[split][m])) {
       const d = rec[split][m], rep = d.repeats;
-      const name = m === "agent_baseten" ? L("Agent (Muse Spark Open)", "에이전트 (Muse Spark Open)") : recName(m);
+      const name = m === "agent_baseten" ? L("Agent (Muse Spark Open)", "에이전트 (Muse Spark Open)") : ABL[m] ? ABL[m][0] : recName(m);
       html += `<tr class="${m}"><td>${name}${rep ? `<div class="soft" style="font-size:12px">${L("mean of 3 runs", "3회 평균")}</div>` : ""}</td>${cols.map(([k]) => `<td>${rep && rep[k] ? `${rep[k].mean}${rep[k].std ? ` ± ${rep[k].std}` : ""}` : d.summary[k] ?? "–"}</td>`).join("")}</tr>`;
     }
     html += `</table>`;

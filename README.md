@@ -148,6 +148,18 @@ the fresh set above. The 2 remaining lots come from a metrology tool that reads 
 measures its monitor wafers on the good tool, but production feedback still mixes in the
 biased one. Full account: [docs/RECOVERY.md](docs/RECOVERY.md).
 
+**Is the answer planted?** The scenarios leave clues in the PM record and the chamber's
+earlier PMs, so we hid them and ran again (criteria written first). With earlier PMs hidden,
+PM details hidden, or both, the agent had 9, 5 and 9 off-target lots, still under the rule's
+21, with no out-of-spec lots and more monitor wafers (2.1 to 2.5). It found skipped
+seasoning from the monitor wafers alone; it lost lots only on the new-part drift, which no
+monitor wafer can show in advance. The open model (Muse Spark Open on Baseten) had 2
+off-target lots with 2.5 monitor wafers per recovery.
+
+**From diagnosis to recovery.** For the four development alarms where a chamber came back from
+PM running thick, the console links the diagnosis to a recovery of the same chamber and PM.
+The agent brought all four back with no off-target lots, using 1 or 2 monitor wafers.
+
 **Cost.** A diagnosis uses about 50 to 58 thousand tokens and a recovery about 35 thousand
 (Muse Spark 1.3, measured over the benchmark runs). At $1.25 per million input tokens and
 $4.25 per million output tokens, that is under $0.25 per alarm and under $0.15 per recovery

@@ -120,3 +120,37 @@ it shows). Criteria for each condition:
 3. More monitor wafers than with all clues present (1.67 per recovery).
 
 Whatever happens is reported per scenario.
+
+### Result of the clue-removal check
+
+All three criteria met in all three conditions (one run each, seeds 7 and 8):
+
+| Condition | Off-target lots | Out-of-spec | Monitor wafers per recovery |
+| --- | --- | --- | --- |
+| All clues (3-run mean, from above) | 2 | 0 | 1.67 |
+| Earlier PMs hidden | 9 | 0 | 2.1 |
+| PM details hidden | 5 | 0 | 2.3 |
+| Both hidden | 9 | 0 | 2.5 |
+| Two-monitor rule (same set) | 21 | 0 | 2.0 |
+
+Per scenario, reading the traces:
+
+- `seasoning`: with both clue sources gone the agent ran four monitor wafers, saw the first
+  two come out thin and the next two land high, and re-estimated from the last two only.
+  0 off-target lots. With only the PM details hidden it once averaged all three monitors,
+  thin ones included, and lost 1 lot.
+- `fast_drift`: this is where the extra off-target lots come from (5 and 2). Without the
+  earlier PMs the agent had no way to know a new showerhead thins fast, and it released with
+  no drift pre-compensation. Its monitor wafers were run at different recipe times, which
+  hides a per-run trend. This is the case we expected it to lose.
+- `no_shift`: with the PM details hidden the agent could no longer tell the chamber was never
+  opened, so it ran 2 or 3 monitor wafers to check, and kept the recipe within 0.18%.
+- `metrology_bias`: unchanged; the matching check is not a hidden clue.
+
+So the agent does lean on the clues where they carry information nothing else can give it
+(how a new part will drift), and works the rest out from monitor wafers at some extra cost.
+
+### Open model (Muse Spark Open on Baseten), fresh held-out set, one run
+
+2 off-target lots, no out-of-spec lots, 2.5 monitor wafers per recovery (against 1.67 for
+Muse Spark 1.3). Same decisions where it matters; it checks more before releasing.
