@@ -67,15 +67,15 @@ main.console { display: grid; grid-template-columns: 250px minmax(0, 1fr) 360px;
 }
 .alarm-row:hover { background: var(--paper); }
 .alarm-row[aria-current="true"] { background: var(--paper); border-left-color: var(--amber); }
-.kind { font: 600 12px var(--head); text-align: center; border-radius: 3px; padding: 1px 0; }
-.kind.OOS { background: var(--hold-soft); color: var(--hold); }
-.kind.OOC { background: var(--amber-soft); color: #8A6100; }
-.kind.FDC { background: #DFE7EA; color: var(--slate); }
+.kind { font: 700 14px var(--head); letter-spacing: .02em; }
+.kind.OOS { color: var(--hold); }
+.kind.OOC { color: #8A6100; }
+.kind.FDC { color: var(--slate); }
 .alarm-row .what { line-height: 1.25; }
 .alarm-row .what b { font-weight: 600; display: block; }
 .alarm-row .what span { color: var(--muted); font-size: 13px; }
-.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); }
-.dot.awaiting_signoff { background: var(--amber); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: transparent; }
+.dot.awaiting_signoff { background: transparent; }
 .dot.approve { background: var(--release); }
 .dot.reject, .dot.needs_engineer { background: var(--hold); }
 .dot.live { background: var(--amber); animation: pulse 1s infinite alternate; }
@@ -91,10 +91,10 @@ main.console { display: grid; grid-template-columns: 250px minmax(0, 1fr) 360px;
 .reading .num small { font-size: 20px; font-weight: 500; margin-left: 2px; }
 .gauge { grid-column: 1 / -1; margin-top: 10px; }
 .methods { display: flex; gap: 6px; align-items: center; margin: 22px 0 6px; flex-wrap: wrap; }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 5px; overflow: hidden; background: var(--panel); }
-.seg button { border: 0; background: none; padding: 6px 12px; cursor: pointer; color: var(--muted); }
-.seg button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
-.btn { border: 1px solid var(--ink); background: var(--ink); color: var(--panel); padding: 6px 14px; border-radius: 5px; cursor: pointer; font-weight: 500; }
+.seg { display: inline-flex; gap: 18px; margin-right: 12px; border-bottom: 1px solid var(--line); }
+.seg button { border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; background: none; padding: 6px 0; cursor: pointer; color: var(--muted); }
+.seg button[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--ink); font-weight: 600; }
+.btn { border: 1px solid var(--ink); background: var(--ink); color: var(--panel); padding: 6px 14px; border-radius: 2px; cursor: pointer; font-weight: 500; }
 .btn.ghost { background: none; color: var(--ink); }
 .btn:disabled { opacity: .4; cursor: default; }
 .btn.approve { background: var(--release); border-color: var(--release); }
@@ -103,20 +103,14 @@ main.console { display: grid; grid-template-columns: 250px minmax(0, 1fr) 360px;
 
 .empty { margin-top: 30px; color: var(--muted); }
 ol.route { list-style: none; margin: 18px 0 0; padding: 0; position: relative; }
-ol.route::before { content: ""; position: absolute; left: 15px; top: 6px; bottom: 6px; width: 2px; background: var(--line); }
-.step { position: relative; display: grid; grid-template-columns: 32px 1fr; gap: 14px; padding: 8px 0; }
-.step .n {
-  width: 32px; height: 32px; border-radius: 50%; background: var(--panel); border: 2px solid var(--line);
-  display: grid; place-items: center; font: 600 14px var(--head); position: relative; z-index: 1;
-}
+.step { position: relative; display: grid; grid-template-columns: 28px 1fr; gap: 10px; padding: 10px 0; border-top: 1px solid var(--line); }
+.step .n { font: 600 15px/1.6 var(--head); color: var(--muted); text-align: right; }
 .step.flash .body { background: var(--amber-soft); }
-.step .body { border-radius: 6px; padding: 4px 10px 6px; margin-left: -10px; transition: background .6s; }
+.step .body { padding: 0 8px; margin-left: -8px; transition: background .6s; }
 .step .title { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
 .step .title b { font-weight: 600; }
-.chip {
-  display: inline-block; font: 600 12px var(--head); padding: 0 6px; border-radius: 3px; background: var(--amber-soft);
-  color: #7A5600; border: 1px solid #EBCB79; cursor: pointer; line-height: 18px;
-}
+.chip { font: 600 14px var(--head); color: var(--slate); cursor: pointer; }
+.chip:hover { text-decoration: underline; }
 .finding { color: var(--ink); margin-top: 2px; }
 .finding .soft { color: var(--muted); }
 .thought { color: var(--slate); font-style: italic; margin: 2px 0 4px; }
@@ -127,41 +121,38 @@ details.raw pre { font-size: 12px; background: var(--paper); padding: 8px; borde
 .mini th { color: var(--muted); }
 .mini .hi { color: var(--hold); font-weight: 600; }
 
-.step.refused .n { border-color: var(--hold); color: var(--hold); }
-.step.refused .body { background: var(--hold-soft); }
+.step.refused .n, .step.refused .title b { color: var(--hold); }
 .step.refused ul { margin: 4px 0 2px; padding-left: 18px; }
-.step.final .n { border-color: var(--ink); background: var(--ink); color: var(--panel); }
+.step.final .n { color: var(--ink); }
 
 .disposition { margin-top: 6px; }
 .cause { font: 600 22px var(--head); }
-.actions { display: flex; gap: 6px; flex-wrap: wrap; margin: 6px 0 10px; }
-.act { padding: 2px 8px; border-radius: 3px; font-weight: 500; font-size: 14px; background: #DFE7EA; color: var(--slate); }
-.act.hold_lot, .act.hold_chamber { background: var(--hold-soft); color: var(--hold); }
-.act.release_lot { background: var(--release-soft); color: var(--release); }
+.actions { margin: 6px 0 10px; }
+.act { font-weight: 600; color: var(--slate); }
+.act.hold_lot, .act.hold_chamber { color: var(--hold); }
+.act.release_lot { color: var(--release); }
 .claims { margin: 0; padding: 0; list-style: none; }
-.claims li { display: grid; grid-template-columns: 40px 1fr; gap: 6px; padding: 3px 0; }
+.claims li { display: grid; grid-template-columns: 34px 1fr; gap: 6px; padding: 3px 0; }
 .summary { margin-top: 10px; max-width: 70ch; }
 .signoff { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
-.signoff textarea { width: 100%; max-width: 560px; min-height: 64px; border: 1px solid var(--line); border-radius: 5px; padding: 8px; background: var(--panel); display: block; margin: 8px 0; }
+.signoff textarea { width: 100%; max-width: 560px; min-height: 64px; border: 1px solid var(--line); border-radius: 2px; padding: 8px; background: var(--panel); display: block; margin: 8px 0; }
 .soft { color: var(--muted); }
 .signoff .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-.stamp { display: inline-block; font: 700 16px var(--head); padding: 2px 10px; border: 2px solid; border-radius: 4px; transform: rotate(-2deg); }
+.stamp { font: 700 17px var(--head); }
 .stamp.approve { color: var(--release); }
 .stamp.reject { color: var(--hold); }
 .history { margin-top: 14px; color: var(--muted); font-size: 14px; }
 
 
 /* ---------- verdict card ---------- */
-.verdict { margin: 18px 0 8px; padding: 16px 18px 14px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); border-left: 6px solid var(--slate); }
-.verdict.stop { border-left-color: var(--hold); }
-.verdict.go { border-left-color: var(--release); }
-.verdict.pending { border-left-color: var(--amber); }
-.verdict .vhead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
-.verdict .vlabel { font: 700 13px var(--head); padding: 2px 8px; border-radius: 3px; background: #DFE7EA; color: var(--slate); }
-.verdict.stop .vlabel { background: var(--hold-soft); color: var(--hold); }
-.verdict.go .vlabel { background: var(--release-soft); color: var(--release); }
-.verdict.pending .vlabel { background: var(--amber-soft); color: #7A5600; }
-.verdict h2 { font: 600 24px/1.15 var(--head); margin: 0; }
+.verdict { margin: 26px 0 8px; padding: 0 0 4px; }
+.verdict .vhead { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+.verdict .vlabel { font: 700 46px/1 var(--head); color: var(--slate); }
+.verdict.stop .vlabel { color: var(--hold); }
+.verdict.go .vlabel { color: var(--release); }
+.verdict.pending .vlabel { color: #8A6100; font-size: 30px; }
+.verdict h2 { font: 600 26px/1.15 var(--head); margin: 0; }
+.verdict .actions { font-size: 16px; margin: 8px 0 6px; }
 .verdict .summary { margin: 6px 0 8px; }
 .verdict details summary { color: var(--slate); cursor: pointer; font-size: 14px; width: fit-content; margin-top: 4px; }
 .verdict .vmeta { color: var(--muted); font-size: 13px; margin-top: 10px; }
@@ -179,13 +170,13 @@ details.raw pre { font-size: 12px; background: var(--paper); padding: 8px; borde
 .maps figcaption { font-size: 12px; color: var(--muted); line-height: 1.3; margin-top: 3px; }
 .costs { display: grid; grid-template-columns: 1fr auto; row-gap: 2px; }
 .costs span:nth-child(odd) { color: var(--muted); }
-.truth { background: var(--paper); border-radius: 6px; padding: 10px 12px; }
+.truth { border-top: 1px solid var(--line); padding-top: 8px; }
 .refs { margin: 6px 0 0; padding-left: 16px; font-size: 13px; color: var(--muted); }
 .refs a { color: var(--slate); }
 svg text { font: 11px var(--body); fill: var(--muted); }
 
 
-.demobanner { background: var(--amber-soft); padding: 6px 24px; font-size: 14px; border-bottom: 1px solid #EBCB79; }
+.demobanner { background: var(--panel); color: var(--muted); padding: 0 24px 8px; font-size: 13px; border-bottom: 1px solid var(--line); margin-top: -1px; }
 .demobanner a { color: var(--slate); }
 
 /* ---------- glossary tooltips and guide ---------- */
@@ -193,14 +184,13 @@ svg text { font: 11px var(--body); fill: var(--muted); }
 .kind.term, .chip.term, .vlabel.term { text-decoration: none; }
 .term:hover::after, .term:focus-visible::after {
   content: attr(data-tip); position: absolute; left: 0; top: calc(100% + 6px); z-index: 20; width: max-content; max-width: 280px;
-  background: var(--ink); color: var(--panel); font: 400 13px/1.4 var(--body); padding: 7px 10px; border-radius: 5px;
-  white-space: normal; text-align: left; box-shadow: 0 4px 14px rgba(24, 38, 43, .25);
+  background: var(--ink); color: var(--panel); font: 400 13px/1.4 var(--body); padding: 7px 10px; border-radius: 2px;
+  white-space: normal; text-align: left;
 }
-.guide { background: var(--panel); border: 1px solid var(--line); border-left: 6px solid var(--amber); border-radius: 8px; padding: 14px 18px; margin: 0 0 18px; max-width: 860px; position: relative; }
-.guide h2 { font: 600 18px var(--head); margin: 0 0 6px; }
-.guide ol { margin: 0; padding-left: 20px; }
-.guide li { margin: 3px 0; }
-.guide .close { position: absolute; right: 10px; top: 8px; border: 0; background: none; font-size: 20px; cursor: pointer; color: var(--muted); }
+.guide { margin: 0 0 28px; max-width: 68ch; font-size: 16px; }
+.guide h2 { font: 600 20px var(--head); margin: 0 0 6px; }
+.guide p { margin: 0 0 8px; }
+.guide .close { border: 0; background: none; padding: 0; cursor: pointer; color: var(--slate); text-decoration: underline; font-size: 14px; }
 .glossary { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 14px; margin-top: 8px; }
 .glossary dt { font-weight: 600; }
 .glossary dd { margin: 0; color: var(--muted); }
@@ -210,13 +200,10 @@ nav.tabs button.help { border: 1px solid var(--line); }
 .shift { padding: 24px 32px 60px; max-width: 1180px; }
 .shift h1 { font: 600 28px var(--head); margin: 0 0 4px; }
 .shift p.lead { color: var(--muted); margin: 0 0 16px; max-width: 75ch; }
-.counts { display: flex; gap: 10px; flex-wrap: wrap; margin: 6px 0 18px; }
-.count { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 8px 14px; min-width: 150px; }
-.count b { font: 700 24px var(--head); display: block; }
-.count span { color: var(--muted); font-size: 13px; }
-.count.attn { border-color: var(--amber); }
+.counts { font-size: 17px; margin: 4px 0 20px; max-width: 75ch; }
+.counts b { font: 700 22px var(--head); }
 .filters { display: flex; gap: 8px; align-items: center; margin-bottom: 10px; flex-wrap: wrap; }
-.filters select { font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 5px; background: var(--panel); }
+.filters select { font: inherit; padding: 5px 8px; border: 1px solid var(--line); border-radius: 2px; background: var(--panel); }
 table.queue { border-collapse: collapse; width: 100%; background: var(--panel); }
 table.queue th, table.queue td { padding: 9px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: middle; }
 table.queue th { font-weight: 500; color: var(--muted); font-size: 14px; }
@@ -233,8 +220,9 @@ table.queue tr.row:hover td { background: var(--paper); }
 .pair h3 { font: 600 18px var(--head); margin: 8px 0 0; }
 .pair .verdict { margin-top: 8px; }
 .pair .verdict h2 { font-size: 20px; }
-.diffline { margin-top: 16px; padding: 10px 14px; border-radius: 6px; background: var(--amber-soft); }
-.diffline.same { background: var(--release-soft); }
+.pair .verdict .vlabel { font-size: 34px; }
+.diffline { margin-top: 18px; font-size: 17px; }
+.diffline b { color: #8A6100; }
 ol.mini-route { list-style: none; padding: 0; margin: 10px 0 0; font-size: 14px; }
 ol.mini-route li { padding: 6px 0; border-bottom: 1px dashed var(--line); }
 ol.mini-route li b { font-weight: 600; }
@@ -251,7 +239,7 @@ table.sum th, table.sum td { padding: 8px 12px; border-bottom: 1px solid var(--l
 table.sum th:first-child, table.sum td:first-child { text-align: left; }
 table.sum th { font-weight: 500; color: var(--muted); }
 table.sum tr.agent td { font-weight: 600; }
-.bar { display: inline-block; height: 8px; background: var(--ink); margin-right: 8px; vertical-align: middle; border-radius: 1px; }
+.bar { display: inline-block; height: 8px; background: var(--ink); margin-right: 8px; vertical-align: middle; }
 .grid { border-collapse: collapse; background: var(--panel); }
 .grid th, .grid td { padding: 6px 10px; border-bottom: 1px solid var(--line); text-align: left; }
 .grid th { font-weight: 500; color: var(--muted); }
@@ -366,13 +354,12 @@ function guideHtml() {
   let seen = false;
   try { seen = localStorage.getItem("fabtriage-guide") === "closed"; } catch (e) {}
   if (seen) return "";
-  return `<div class="guide" id="guide"><button class="close" aria-label="Close the guide" id="guideclose">×</button>
+  return `<div class="guide" id="guide">
     <h2>How to read this</h2>
-    <ol>
-      <li>Each row is an alarm from a simulated chip fab: a film came out too thick, or a sensor reported something odd. Something has to be decided: hold the wafers and the machine, or let them go.</li>
-      <li>An AI agent investigated each alarm the way an engineer would and proposed a decision. Open a row to see the verdict at the top, the evidence behind it, and every step it took. Underlined words explain themselves when you point at them.</li>
-      <li>Use <b>Side by side</b> to compare with a fixed rulebook, <b>Replay</b> to watch the investigation unfold, and <b>Show what really happened</b> to check the hidden answer.</li>
-    </ol></div>`;
+      <p>Each row is an alarm from a simulated chip fab: a film came out too thick, or a sensor reported something odd. Something has to be decided: hold the wafers and the machine, or let them go.</p>
+      <p>An AI agent investigated each alarm the way an engineer would and proposed a decision. Open a row to see the verdict at the top, the evidence behind it, and every step it took. Underlined words explain themselves when you point at them.</p>
+      <p>Use <b>Side by side</b> to compare with a fixed rulebook, <b>Replay</b> to watch the investigation unfold, and <b>Show what really happened</b> to check the hidden answer.</p>
+    <button class="close" id="guideclose">Got it, hide this</button></div>`;
 }
 function glossaryHtml() {
   return `<dl class="glossary">${Object.entries(GLOSSARY).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>`;
@@ -397,7 +384,7 @@ function renderList() {
       const val = a.type === "FDC" ? `${fmt(a.value, 1)} °C` : `${fmt(a.value)} Å`;
       html += `<button class="alarm-row" data-case="${c.case_id}" aria-current="${c.case_id === state.caseId}">
         ${term(a.type, a.type, "kind " + a.type)}
-        <span class="what"><b>${esc(a.chamber)}</b><span>${esc(a.lot_id)}, ${val}</span></span>
+        <span class="what"><b>${esc(a.chamber)}</b><span>${esc(a.alarm_id)}, ${val}</span></span>
         <span class="dot ${dot}" title="${run ? esc(dot.replace("_", " ")) : "not investigated"}"></span>
       </button>`;
     }
@@ -613,12 +600,7 @@ function renderShift() {
   const rows = cs.slice().sort((x, y) => queueRank(x.runs.agent) - queueRank(y.runs.agent));
   let html = guideHtml() + `<h1>Alarm queue</h1>
     <p class="lead">Every alarm here was investigated by the agent. Start at the top: alarms that need you come first, then proposed holds, then proposed releases. Each alarm is its own simulated fab history.</p>
-    <div class="counts">
-      <div class="count ${waiting ? "attn" : ""}"><b>${waiting}</b><span>waiting for your sign-off</span></div>
-      <div class="count"><b>${holds}</b><span>of them propose a hold</span></div>
-      <div class="count"><b>${attn}</b><span>need an engineer</span></div>
-      <div class="count"><b>${done}</b><span>approved</span></div>
-    </div>
+    <p class="counts"><b>${waiting}</b> waiting for your sign-off, <b>${holds}</b> of them proposing a hold. <b>${attn}</b> need an engineer, <b>${done}</b> approved.</p>
     <div class="filters"><label for="qsplit">Alarm set</label>
       <select id="qsplit">${[["dev", "Development"], ["holdout", "Held-out"], ["holdout2", "Fresh held-out"], ["all", "All"]].map(([v, t]) => `<option value="${v}" ${v === split ? "selected" : ""}>${t}</option>`).join("")}</select></div>
     <table class="queue"><tr><th>Alarm</th><th>${term("Chamber")}</th><th>Reading, ${term("Å")}</th><th>Agent's call</th><th class="opt">Proposed actions</th><th>Status</th></tr>`;
@@ -630,7 +612,7 @@ function renderShift() {
       <td><span style="display:inline-block;width:38px">${term(a.type, a.type, "kind " + a.type)}</span> <span class="soft">${esc(a.alarm_id)}</span></td>
       <td>${esc(a.chamber)}</td><td>${val}</td>
       <td>${r && r.cause ? esc(CAUSES[r.cause] || r.cause) : `<span class="soft">not investigated</span>`}</td>
-      <td class="opt">${r ? (r.actions || []).map((x) => `<span class="act ${x}">${ACTIONS[x] || x}</span>`).join(" ") : ""}</td>
+      <td class="opt">${r ? (r.actions || []).map((x) => `<span class="act ${x}">${ACTIONS[x] || x}</span>`).join(", ") : ""}</td>
       <td><span class="status ${st}">${STATUS_TEXT[st] || ""}</span></td></tr>`;
   }
   html += `</table><details style="margin-top:18px"><summary>Glossary</summary>${glossaryHtml()}</details>`;
@@ -663,7 +645,7 @@ function verdictCard(run, evStep, withSignoff, live) {
       <p class="summary">${esc((run.status || "").replace("_", " "))}${run.error ? ": " + esc(run.error) : ""}</p></section>`;
   }
   const holds = d.actions.some((x) => x.type === "hold_lot" || x.type === "hold_chamber");
-  const acts = d.actions.map((x) => `<span class="act ${esc(x.type)}">${ACTIONS[x.type] || esc(x.type)}: ${esc(x.target)}</span>`).join("");
+  const acts = d.actions.map((x) => `<span class="act ${esc(x.type)}">${ACTIONS[x.type] || esc(x.type)} ${esc(x.target)}</span>`).join(". ") + ".";
   const claim = (cl) => `<li><span><span class="chip" data-step="${evStep[cl.evidence_id] || ""}">${esc(cl.evidence_id)}</span></span><span>${esc(cl.statement)}</span></li>`;
   const top = d.claims.slice(0, 3).map(claim).join(""), rest = d.claims.slice(3).map(claim).join("");
   const tries = c.disposition_tries || 1;
@@ -680,7 +662,7 @@ function verdictCard(run, evStep, withSignoff, live) {
 }
 
 function disposition(d, evStep) {
-  const acts = d.actions.map((x) => `<span class="act ${esc(x.type)}">${ACTIONS[x.type] || esc(x.type)}: ${esc(x.target)}</span>`).join("");
+  const acts = d.actions.map((x) => `<span class="act ${esc(x.type)}">${ACTIONS[x.type] || esc(x.type)} ${esc(x.target)}</span>`).join(". ") + ".";
   const claims = d.claims.map((c) => `<li><span><span class="chip" data-step="${evStep[c.evidence_id] || ""}">${esc(c.evidence_id)}</span></span><span>${esc(c.statement)}</span></li>`).join("");
   return `<div class="disposition"><div class="cause">${esc(CAUSES[d.cause] || d.cause)}</div>
     <div class="actions">${acts}</div><ul class="claims">${claims}</ul><p class="summary">${esc(d.summary)}</p></div>`;
