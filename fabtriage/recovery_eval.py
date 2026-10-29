@@ -19,14 +19,18 @@ from . import recovery as R
 MODEL_METHODS = ("agent",)
 
 
-def _label(method, backend):
-    return method if backend in (None, "meta") or method not in MODEL_METHODS else f"{method}_{backend}"
+def _label(method, backend, hide=()):
+    label = method if backend in (None, "meta") or method not in MODEL_METHODS else f"{method}_{backend}"
+    if hide:
+        label += "_hide-" + "-".join(sorted(hide))
+    return label
 
 
-def run_one(method, case_id, runs_dir: Path, client=None, backend=None, autosave=False) -> dict:
+def run_one(method, case_id, runs_dir: Path, client=None, backend=None, autosave=False, hide=()) -> dict:
     case = R.load(case_id)
-    label = _label(method, backend)
+    label = _label(method, backend, hide)
     job = R.RecoveryJob(case, runs_dir / label / case_id)
+    job.hide = set(hide)
     job.autosave = autosave
     job.live_extra = {"method": label, "live": True}
     extra = {}
@@ -76,20 +80,20 @@ def write_results(label, split, runs_dir: Path, rows: list) -> dict:
     return result
 
 
-def run_split(method, split, runs_dir: Path, client=None, backend=None, only=None) -> dict:
+def run_split(method, split, runs_dir: Path, client=None, backend=None, only=None, hide=()) -> dict:
     ids = R.benchmark(split)
     if only:
         ids = [i for i in ids if any(i.removeprefix("rec_").startswith(o) for o in only)]
     rows = []
     for cid in ids:
-        row = run_one(method, cid, runs_dir, client, backend)
+        row = run_one(method, cid, runs_dir, client, backend, hide=hide)
         print(
             f"{cid:26s} status={row['status']:14s} off_target={row['off_target_lots']:2d} oos={row['out_of_spec_lots']} "
             f"monitors={row['monitor_wafers']} change={row['recipe_change_pct']}% calls={row['tool_calls']}",
             flush=True,
         )
         rows.append(row)
-    return write_results(_label(method, backend), split, runs_dir, rows)
+    return write_results(_label(method, backend, hide), split, runs_dir, rows)
 
 
 def run_repeats(method, split, runs_dir: Path, repeats: int, client=None, backend=None) -> dict:
@@ -111,9 +115,12 @@ def run_repeats(method, split, runs_dir: Path, repeats: int, client=None, backen
     return out
 
 
+ABLATIONS = ["agent_hide-history", "agent_hide-pm_detail", "agent_hide-history-pm_detail"]
+
+
 def load_results(runs_dir: Path, split: str) -> dict:
     out = {}
-    for m in ["agent", "agent_baseten", "monitor_rule", "reset_recipe", "keep_recipe"]:
+    for m in ["agent", "agent_baseten", *ABLATIONS, "monitor_rule", "reset_recipe", "keep_recipe"]:
         path = runs_dir / f"results_{m}_{split}.json"
         if path.exists():
             data = json.loads(path.read_text())

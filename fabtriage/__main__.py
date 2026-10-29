@@ -54,10 +54,11 @@ def main(argv=None) -> None:
     im.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "all"])
     rc = sub.add_parser("recover", help="recovery after PM: bring a held chamber back to target")
     rc.add_argument("--method", required=True, choices=["agent", "monitor_rule", "reset_recipe", "keep_recipe"])
-    rc.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "all"])
+    rc.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "all", "linked"])
     rc.add_argument("--backend", default="meta", choices=["meta", "baseten"])
     rc.add_argument("--only", nargs="*", help="scenario names, e.g. seasoning fast_drift")
     rc.add_argument("--repeats", type=int, default=1)
+    rc.add_argument("--hide", nargs="*", default=[], choices=["history", "pm_detail"], help="ablation: hide clues from the agent")
     rr = sub.add_parser("recover-report", help="recovery results and the pre-registered success criteria")
     rr.add_argument("--split", default="holdout", choices=["dev", "holdout", "holdout2", "all"])
     dm = sub.add_parser("demo", help="open the read-only demo from docs/demo; no API key needed")
@@ -112,14 +113,14 @@ def main(argv=None) -> None:
                 out = RE.run_repeats(args.method, args.split, rdir, args.repeats, client, args.backend)
                 print(json.dumps(out["mean_std"], indent=2))
             else:
-                out = RE.run_split(args.method, args.split, rdir, client, args.backend, args.only)
+                out = RE.run_split(args.method, args.split, rdir, client, args.backend, args.only, hide=args.hide)
                 print(json.dumps(out["summary"], indent=2))
         else:
             res = RE.load_results(rdir, args.split)
             cols = ["off_target_lots", "out_of_spec_lots", "avg_monitor_wafers", "avg_downtime_h", "needs_engineer", "rule_broken_cases", "no_shift_max_change_pct"]
-            print("method".ljust(16) + "".join(c[:14].rjust(16) for c in cols))
+            print("method".ljust(32) + "".join(c[:14].rjust(16) for c in cols))
             for m, d in res.items():
-                print(m.ljust(16) + "".join(str(d["summary"][c]).rjust(16) for c in cols))
+                print(m[:30].ljust(32) + "".join(str(d["summary"][c]).rjust(16) for c in cols))
             for c in RE.criteria(res):
                 print(("MET  " if c["met"] else "MISS ") + f"{c['criterion']}: {c['value']}")
     elif args.cmd == "demo":

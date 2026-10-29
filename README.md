@@ -148,10 +148,17 @@ the fresh set above. The 2 remaining lots come from a metrology tool that reads 
 measures its monitor wafers on the good tool, but production feedback still mixes in the
 biased one. Full account: [docs/RECOVERY.md](docs/RECOVERY.md).
 
+**Cost.** A diagnosis uses about 50 to 58 thousand tokens and a recovery about 35 thousand
+(Muse Spark 1.3, measured over the benchmark runs). At $1.25 per million input tokens and
+$4.25 per million output tokens, that is under $0.25 per alarm and under $0.15 per recovery
+even if every token were billed at the output price; most tokens are input, so the real figure
+is closer to $0.07 and $0.05.
+
 ```bash
 python -m fabtriage recover --method monitor_rule --split holdout
 python -m fabtriage recover --method agent --split holdout --repeats 3
 python -m fabtriage recover-report --split holdout
+python -m fabtriage recover --method agent --split holdout2 --hide history pm_detail   # clue-removal check
 ```
 
 ## Run it

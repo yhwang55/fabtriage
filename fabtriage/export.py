@@ -64,7 +64,7 @@ def export(out: Path) -> dict:
     rec = server.recovery_cases()
     _write(out / "data" / "recovery" / "cases.json", {"cases": rec})
     n_rec = 0
-    for cid in R.benchmark("all"):
+    for cid in R.all_ids():
         for m in server.REC_METHODS:
             run = server.recovery_run(m, cid)
             if run:

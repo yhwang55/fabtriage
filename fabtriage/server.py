@@ -127,14 +127,14 @@ def benchmark() -> dict:
 
 
 # ---------------------------------------------------------------- recovery after PM
-REC_METHODS = ["agent", "monitor_rule", "reset_recipe", "keep_recipe"]
+REC_METHODS = ["agent", "agent_baseten", "monitor_rule", "reset_recipe", "keep_recipe"]
 
 
 def recovery_cases() -> list:
     from . import recovery as R
 
     out = []
-    for split in ("dev", "holdout", "holdout2"):
+    for split in ("linked", "dev", "holdout", "holdout2"):
         for cid in R.benchmark(split):
             c = R.load(cid)
             runs = {}
@@ -146,14 +146,14 @@ def recovery_cases() -> list:
                     except ValueError:
                         continue
                     runs[m] = {k: sc.get(k) for k in ("status", "off_target_lots", "out_of_spec_lots", "monitor_wafers", "recipe_change_pct")}
-            out.append({"case_id": cid, "split": split, "chamber": c.chamber, "pm": c.pm, "pre_pm_time_s": c.pre_pm_time_s, "runs": runs})
+            out.append({"case_id": cid, "split": split, "chamber": c.chamber, "pm": c.pm, "pre_pm_time_s": c.pre_pm_time_s, "origin": c.origin, "runs": runs})
     return out
 
 
 def recovery_run(method: str, case_id: str) -> dict | None:
     from . import recovery as R
 
-    if method not in REC_METHODS or case_id not in R.benchmark("all"):
+    if method not in REC_METHODS or case_id not in R.all_ids():
         raise ValueError("unknown method or case")
     path = RUNS / "recovery" / method / case_id / "run.json"
     if not path.exists():

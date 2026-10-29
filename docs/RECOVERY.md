@@ -97,3 +97,26 @@ against the rule's 2; no recipe change when nothing changed. The 2 lots are the 
 the result. The verifier sent back three releases over numbers it could not find in the cited
 evidence (one was "40", read from the field name "first 40"); the agent fixed each on the
 next try.
+
+## Clue-removal check (written before running it)
+
+The scenarios leave clues in the PM record (parts replaced, seasoning skipped, chamber not
+opened) and in the chamber's earlier PMs (how fast film thinned after a showerhead swap, how
+thin the first wafers came out without seasoning). A fair question: does the agent read the
+evidence, or does it only work because the answer was planted where it looks?
+
+So the agent runs the fresh held-out set (seeds 7 and 8) once more under three conditions:
+earlier PMs hidden, PM details hidden, and both hidden. With PM details hidden the playbook
+asks for at least one monitor wafer, since nobody knows what was done. Nothing else changes.
+
+What we expect if the agent reads evidence rather than leaning on clues: with clues gone it
+should spend more monitor wafers and still beat the two-monitor rule. Some scenarios can
+still be read from monitor wafers alone (thin first wafers after skipped seasoning, a fast
+thinning trend across several monitors); others cannot (the drift rate of a new part before
+it shows). Criteria for each condition:
+
+1. Off-target lots stay below the two-monitor rule on the same set (21).
+2. No out-of-spec lots.
+3. More monitor wafers than with all clues present (1.67 per recovery).
+
+Whatever happens is reported per scenario.

@@ -49,9 +49,12 @@ SCENARIOS = ["post_pm_reset", "seasoning", "fast_drift", "metrology_bias", "no_s
 DEV_SEEDS = [1, 2, 3, 4]
 HOLDOUT_SEEDS = [5, 6]  # run once on Oct 29; one run in 30 exposed the drift sign mix-up
 HOLDOUT2_SEEDS = [7, 8]  # fresh set for the version with the sign rule
+LINKED_FROM = [f"pm_shift-{s}" for s in sim.DEV_SEEDS]  # recoveries that continue a diagnosis; not in the benchmark
 
 
 def benchmark(split: str = "dev") -> list:
+    if split == "linked":
+        return [f"rec_after_{d}" for d in LINKED_FROM]
     seeds = {
         "dev": DEV_SEEDS,
         "holdout": HOLDOUT_SEEDS,
@@ -74,6 +77,7 @@ class RecoveryCase:
     matching: dict  # latest metrology tool-matching check
     truth: dict  # explanation, for review only
     hidden: dict = field(default_factory=dict)  # physics the tools must not read
+    origin: dict | None = None  # the diagnosis that held this chamber, when there was one
 
 
 def _rng(case_id: str, stream: str) -> np.random.Generator:
@@ -177,14 +181,46 @@ def generate(scenario: str, seed: int) -> RecoveryCase:
     return RecoveryCase(cid, scenario, seed, chamber, pm, pre_time, hist, past, matching, truth, hidden)
 
 
+def generate_linked(diag_id: str) -> RecoveryCase:
+    """The recovery that follows a pm_shift diagnosis: same chamber, same PM, same shift.
+
+    The diagnosis simulator models film offsets, this one models rate x time, so the PM shift
+    seen in the diagnosis (about +15 A at the old recipe) becomes the rate change here.
+    """
+    diag = sim.load(diag_id)
+    if diag.scenario != "pm_shift":
+        raise ValueError("only pm_shift diagnoses lead to a recovery")
+    chamber = diag.alarm["chamber"]
+    pm_t, shift = diag.hidden["world"].chamber_step[chamber][-1]
+    base = generate("post_pm_reset", 100 + diag.seed)
+    cid = f"rec_after_{diag_id}"
+    base.case_id, base.chamber = cid, chamber
+    base.pm = {**base.pm, "chamber": chamber, "pm_id": f"PM at {pm_t} h"}
+    base.hidden["post_frac"] = base.hidden["pre_frac"] * (1 + shift / TARGET)
+    base.origin = {"case_id": diag_id, "alarm_id": diag.alarm["alarm_id"], "lot_id": diag.alarm["lot_id"]}
+    base.truth = {
+        "scenario": "post_pm_reset",
+        "explanation": f"Same chamber and PM as alarm {diag.alarm['alarm_id']}: {chamber} came back from PM running "
+        f"about {shift:.0f} A thick at the old recipe. A monitor wafer shows it; the recipe needs to come down.",
+    }
+    return base
+
+
 _CACHE: dict = {}
 
 
 def load(case_id: str) -> RecoveryCase:
     if case_id not in _CACHE:
-        name, seed = case_id.removeprefix("rec_").rsplit("-", 1)
-        _CACHE[case_id] = generate(name, int(seed))
+        if case_id.startswith("rec_after_"):
+            _CACHE[case_id] = generate_linked(case_id.removeprefix("rec_after_"))
+        else:
+            name, seed = case_id.removeprefix("rec_").rsplit("-", 1)
+            _CACHE[case_id] = generate(name, int(seed))
     return _CACHE[case_id]
+
+
+def all_ids() -> list:
+    return benchmark("all") + benchmark("linked")
 
 
 # ---------------------------------------------------------------------------- physics
@@ -331,6 +367,7 @@ class RecoveryJob:
         self.notes: list = []
         self.autosave = False
         self.live_extra: dict = {}
+        self.hide: set = set()  # ablation: "history" drops earlier PMs, "pm_detail" drops parts and seasoning
 
     def kickoff(self, engineer_note=None) -> str:
         return f"{self.case.chamber} is on hold after {self.case.pm['pm_id']}. Recover it and release it to production."
@@ -372,9 +409,12 @@ class RecoveryJob:
     # ------------------------------------------------------------------ tools
     def t_get_recovery_brief(self):
         c = self.case
+        pm = c.pm
+        if "pm_detail" in self.hide:
+            pm = {"chamber": pm["chamber"], "pm_id": pm["pm_id"], "work": "PM completed (details not recorded)", "duration_h": pm["duration_h"]}
         return {
             "chamber": c.chamber,
-            "pm_record": c.pm,
+            "pm_record": pm,
             "pre_pm_recipe_time_s": c.pre_pm_time_s,
             "baseline_recipe_time_s_clean_chamber": T_NOM,
             "target_A": TARGET,
@@ -383,16 +423,20 @@ class RecoveryJob:
             "controller": {"type": "EWMA on deposition rate", "default_lambda": DEFAULT_LAMBDA, "measured_lot_fraction": 0.5},
             "monitor_wafers_left": MAX_MONITORS - len(self.monitors),
             "default_monitor_metrology_tool": DEFAULT_MONITOR_TOOL,
+            **({"held_after": f"alarm {c.origin['alarm_id']}: diagnosed as a chamber shift after this PM"} if c.origin else {}),
         }
 
     def t_get_chamber_history(self):
         h = self.case.history
-        return {
+        out = {
             "chamber": self.case.chamber,
             "end_of_previous_cycle": h,
             "mean_thickness_last_10_A": round(float(np.mean([x["thickness_A"] for x in h[-10:]])), 2),
             "earlier_pms": self.case.past_pms,
         }
+        if "history" in self.hide:
+            out["earlier_pms"] = "not available"
+        return out
 
     def t_get_metrology_matching(self):
         m = dict(self.case.matching)
@@ -535,8 +579,10 @@ def check(job: RecoveryJob, r: dict) -> list:
     if abs(t / c.pre_pm_time_s - 1) > MAX_CHANGE + 1e-9:
         problems.append(f"rule: one recipe change is capped at 8% of the pre-PM time {c.pre_pm_time_s} s")
     opened = "clean" in c.pm["work"] and "not opened" not in c.pm["work"] or bool(c.pm["parts_replaced"])
+    if "pm_detail" in job.hide:
+        opened = True  # what was done is unknown, so the playbook asks for a monitor wafer
     if opened and not job.monitors:
-        problems.append("rule: after a chamber clean or a part change, run at least one monitor wafer before release")
+        problems.append("rule: after a chamber clean, a part change or an unrecorded PM, run at least one monitor wafer before release")
     lam = r["ewma_lambda"]
     if not 0.1 <= lam <= 0.6:
         problems.append("rule: ewma_lambda must be between 0.1 and 0.6")

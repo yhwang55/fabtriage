@@ -363,3 +363,19 @@ def test_recovery_negative_drift_is_refused():
     assert not r["accepted"] and any("positive number" in p for p in r["problems"])
     r = job.call("release_chamber", {"time_s": e["recipe_time_s_for_500A"], "drift_A_per_lot": abs(slope), "claims": claims, "summary": "x"})
     assert r["accepted"], r
+
+
+def test_recovery_ablation_hides_clues_and_linked_cases_load():
+    from fabtriage import recovery as R
+
+    job = R.RecoveryJob(R.load("rec_fast_drift-7"))
+    job.hide = {"history", "pm_detail"}
+    b = job.call("get_recovery_brief", {})
+    h = job.call("get_chamber_history", {})
+    assert "parts_replaced" not in b["pm_record"] and "seasoning" not in b["pm_record"]
+    assert h["earlier_pms"] == "not available"
+    r = job.call("release_chamber", {"time_s": job.case.pre_pm_time_s, "claims": [{"evidence_id": b["evidence_id"], "statement": "x"}, {"evidence_id": h["evidence_id"], "statement": "y"}], "summary": "x"})
+    assert any("monitor wafer" in p for p in r["problems"])
+    for cid in R.benchmark("linked"):
+        c = R.load(cid)
+        assert c.origin and c.chamber == __import__("fabtriage.sim", fromlist=["x"]).load(c.origin["case_id"]).alarm["chamber"]
