@@ -187,6 +187,25 @@ svg text { font: 11px var(--body); fill: var(--muted); }
 
 .demobanner { background: var(--amber-soft); padding: 6px 24px; font-size: 14px; border-bottom: 1px solid #EBCB79; }
 .demobanner a { color: var(--slate); }
+
+/* ---------- glossary tooltips and guide ---------- */
+.term { position: relative; cursor: help; text-decoration: underline dotted var(--muted); text-underline-offset: 3px; }
+.kind.term, .chip.term, .vlabel.term { text-decoration: none; }
+.term:hover::after, .term:focus-visible::after {
+  content: attr(data-tip); position: absolute; left: 0; top: calc(100% + 6px); z-index: 20; width: max-content; max-width: 280px;
+  background: var(--ink); color: var(--panel); font: 400 13px/1.4 var(--body); padding: 7px 10px; border-radius: 5px;
+  white-space: normal; text-align: left; box-shadow: 0 4px 14px rgba(24, 38, 43, .25);
+}
+.guide { background: var(--panel); border: 1px solid var(--line); border-left: 6px solid var(--amber); border-radius: 8px; padding: 14px 18px; margin: 0 0 18px; max-width: 860px; position: relative; }
+.guide h2 { font: 600 18px var(--head); margin: 0 0 6px; }
+.guide ol { margin: 0; padding-left: 20px; }
+.guide li { margin: 3px 0; }
+.guide .close { position: absolute; right: 10px; top: 8px; border: 0; background: none; font-size: 20px; cursor: pointer; color: var(--muted); }
+.glossary { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; font-size: 14px; margin-top: 8px; }
+.glossary dt { font-weight: 600; }
+.glossary dd { margin: 0; color: var(--muted); }
+nav.tabs button.help { border: 1px solid var(--line); }
+
 /* ---------- alarm queue ---------- */
 .shift { padding: 24px 32px 60px; max-width: 1180px; }
 .shift h1 { font: 600 28px var(--head); margin: 0 0 4px; }
@@ -325,6 +344,39 @@ async function api(path, body) {
 const waferSrc = (cid, lot) => (STATIC ? `wafer/${cid}.png` : `/api/wafer.png?case=${cid}&lot=${lot}`);
 const mapSrc = (method, cid, image) => (STATIC ? `maps/${method}/${cid}/${image.split("/").pop()}` : `/runs/${method}/${cid}/${image}`);
 
+
+const GLOSSARY = {
+  OOS: "Out of spec: the reading is outside the limits the product must meet (here 485 to 515 Å). Lots like this cannot ship as they are.",
+  OOC: "Out of control: the reading is inside spec but outside the statistical control limits (493 to 507 Å). Something may be changing, or it may be chance.",
+  FDC: "Fault detection and classification: sensors logged on every run of a tool (heater temperature, RF power, pressure, gas flow).",
+  PM: "Preventive maintenance: scheduled cleaning and part replacement. A chamber can come back from PM running differently.",
+  "Å": "Ångström, one tenth of a nanometer. Film thickness here is about 500 Å.",
+  Lot: "A batch of 25 wafers that moves through the fab together. Usually only one wafer of a lot is measured.",
+  Chamber: "One process chamber of a deposition tool. DEP01-A and DEP01-B are two chambers of tool DEP01.",
+  Metrology: "Measuring the wafer. Two tools here, MET01 and MET02. A measuring tool can misread too.",
+  "Commonality analysis": "A statistical check of whether lots that went through one tool at a step differ from the rest (one-way ANOVA). Small p-values point at a tool.",
+  Verifier: "Plain code that checks every disposition before an engineer sees it: each claim must cite real evidence, every number must match it, and playbook safety rules must hold.",
+  "Evidence id": "Every tool result gets an id (E1, E2, ...). Claims must cite one. Click it to jump to the step that produced it.",
+  Hold: "Stop the lot or the chamber until an engineer clears it. Safe, but it costs production time.",
+  Release: "Let the lot continue. Right when the film is fine; costly if it is not.",
+};
+const term = (word, label = word, cls = "") => `<span class="term ${cls}" tabindex="0" data-tip="${esc(GLOSSARY[word] || "")}">${label}</span>`;
+function guideHtml() {
+  let seen = false;
+  try { seen = localStorage.getItem("fabtriage-guide") === "closed"; } catch (e) {}
+  if (seen) return "";
+  return `<div class="guide" id="guide"><button class="close" aria-label="Close the guide" id="guideclose">×</button>
+    <h2>How to read this</h2>
+    <ol>
+      <li>Each row is an alarm from a simulated chip fab: a film came out too thick, or a sensor reported something odd. Something has to be decided: hold the wafers and the machine, or let them go.</li>
+      <li>An AI agent investigated each alarm the way an engineer would and proposed a decision. Open a row to see the verdict at the top, the evidence behind it, and every step it took. Underlined words explain themselves when you point at them.</li>
+      <li>Use <b>Side by side</b> to compare with a fixed rulebook, <b>Replay</b> to watch the investigation unfold, and <b>Show what really happened</b> to check the hidden answer.</li>
+    </ol></div>`;
+}
+function glossaryHtml() {
+  return `<dl class="glossary">${Object.entries(GLOSSARY).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>`;
+}
+
 /* ---------------- list ---------------- */
 async function loadCases() {
   const data = await api("/api/cases");
@@ -343,7 +395,7 @@ function renderList() {
       const dot = run ? (run.live ? "live" : run.signoff || run.status) : "";
       const val = a.type === "FDC" ? `${fmt(a.value, 1)} °C` : `${fmt(a.value)} Å`;
       html += `<button class="alarm-row" data-case="${c.case_id}" aria-current="${c.case_id === state.caseId}">
-        <span class="kind ${a.type}">${a.type}</span>
+        ${term(a.type, a.type, "kind " + a.type)}
         <span class="what"><b>${esc(a.chamber)}</b><span>${esc(a.lot_id)}, ${val}</span></span>
         <span class="dot ${dot}" title="${run ? esc(dot.replace("_", " ")) : "not investigated"}"></span>
       </button>`;
@@ -441,7 +493,7 @@ function alarmHeader(c, live, run) {
   const canRun = state.method === "agent" && state.liveEnabled && !live && !heldOut;
   return `<div class="alarm-head">
       <div><h1>${esc(a.chamber)}, ${esc(a.lot_id)}</h1>
-      <div class="sub">${a.type === "FDC" ? "FDC alarm, " + esc(a.parameter) : esc(a.rule)}. Raised at ${a.time_h} h by ${esc(a.alarm_id)}.</div></div>
+      <div class="sub">${term(a.type)} ${a.type === "FDC" ? "alarm, " + esc(a.parameter) : esc(a.rule)}. Raised at ${a.time_h} h by ${esc(a.alarm_id)}.</div></div>
       <div class="reading"><div class="num">${reading}</div></div>
       ${gauge(a.value, L, a.type)}
     </div>
@@ -485,14 +537,18 @@ function renderTraveler(live) {
       } else {
         const probs = (r.problems || []).map((p) => `<li>${esc(p.replace(/^rule: /, ""))}</li>`).join("");
         html += `<li class="step refused" id="step-${n}"><span class="n">${n}</span><div class="body">${thought}
-          <div class="title"><b>Verifier refused the disposition</b></div><ul>${probs}</ul>
+          <div class="title"><b>${term("Verifier")} refused the disposition</b></div><ul>${probs}</ul>
           <details class="raw"><summary>What the agent tried to file</summary><pre>${esc(JSON.stringify(s.args, null, 1))}</pre></details></div></li>`;
       }
       return;
     }
-    const label = s.tool === "get_trend" ? `Pulled ${esc(s.args.signal)} on ${esc(s.args.chamber)}` : TOOL_NAMES[s.tool] || s.tool;
+    let label = s.tool === "get_trend" ? `Pulled ${esc(s.args.signal)} on ${esc(s.args.chamber)}` : TOOL_NAMES[s.tool] || s.tool;
+    if (s.tool === "run_commonality") label = `Ran ${term("Commonality analysis", "commonality analysis")}`;
+    if (s.tool === "get_pm_log") label = `Read the ${term("PM")} log`;
+    if (s.tool === "get_fdc_summary") label = `Checked ${term("FDC")} sensors`;
+    if (s.tool === "request_measurement") label = `Requested a ${term("Metrology", "measurement")}`;
     html += `<li class="step" id="step-${n}"><span class="n">${n}</span><div class="body">${thought}
-      <div class="title"><b>${label}</b>${r.evidence_id ? `<span class="chip" data-step="${n}">${r.evidence_id}</span>` : ""}</div>
+      <div class="title"><b>${label}</b>${r.evidence_id ? `<span class="chip" data-step="${n}" title="${esc(GLOSSARY["Evidence id"])}">${r.evidence_id}</span>` : ""}</div>
       <div class="finding">${finding(s)}</div>
       <details class="raw"><summary>Raw result</summary><pre>${esc(JSON.stringify(r, null, 1))}</pre></details></div></li>`;
   });
@@ -554,7 +610,7 @@ function renderShift() {
   const done = n((r) => r && r.signoff === "approve");
   const holds = n((r) => r && (r.actions || []).some((x) => x.startsWith("hold")) && !r.signoff);
   const rows = cs.slice().sort((x, y) => queueRank(x.runs.agent) - queueRank(y.runs.agent));
-  let html = `<h1>Alarm queue</h1>
+  let html = guideHtml() + `<h1>Alarm queue</h1>
     <p class="lead">Every alarm here was investigated by the agent. Start at the top: alarms that need you come first, then proposed holds, then proposed releases. Each alarm is its own simulated fab history.</p>
     <div class="counts">
       <div class="count ${waiting ? "attn" : ""}"><b>${waiting}</b><span>waiting for your sign-off</span></div>
@@ -564,20 +620,22 @@ function renderShift() {
     </div>
     <div class="filters"><label for="qsplit">Alarm set</label>
       <select id="qsplit">${[["dev", "Development"], ["holdout", "Held-out"], ["holdout2", "Fresh held-out"], ["all", "All"]].map(([v, t]) => `<option value="${v}" ${v === split ? "selected" : ""}>${t}</option>`).join("")}</select></div>
-    <table class="queue"><tr><th>Alarm</th><th>Chamber</th><th>Reading</th><th>Agent's call</th><th class="opt">Proposed actions</th><th>Status</th></tr>`;
+    <table class="queue"><tr><th>Alarm</th><th>${term("Chamber")}</th><th>Reading, ${term("Å")}</th><th>Agent's call</th><th class="opt">Proposed actions</th><th>Status</th></tr>`;
   for (const c of rows) {
     const a = c.alarm, r = c.runs.agent;
     const st = r ? (r.live ? "running" : r.signoff || r.status) : "";
     const val = a.type === "FDC" ? `${fmt(a.value, 1)} °C` : `${fmt(a.value)} Å`;
     html += `<tr class="row" data-case="${c.case_id}" tabindex="0">
-      <td><span class="kind ${a.type}" style="display:inline-block;width:38px">${a.type}</span> <span class="soft">${esc(a.alarm_id)}</span></td>
+      <td><span style="display:inline-block;width:38px">${term(a.type, a.type, "kind " + a.type)}</span> <span class="soft">${esc(a.alarm_id)}</span></td>
       <td>${esc(a.chamber)}</td><td>${val}</td>
       <td>${r && r.cause ? esc(CAUSES[r.cause] || r.cause) : `<span class="soft">not investigated</span>`}</td>
       <td class="opt">${r ? (r.actions || []).map((x) => `<span class="act ${x}">${ACTIONS[x] || x}</span>`).join(" ") : ""}</td>
       <td><span class="status ${st}">${STATUS_TEXT[st] || ""}</span></td></tr>`;
   }
-  html += `</table>`;
+  html += `</table><details style="margin-top:18px"><summary>Glossary</summary>${glossaryHtml()}</details>`;
   $("#shift").innerHTML = html;
+  const gc = $("#guideclose");
+  if (gc) gc.onclick = () => { try { localStorage.setItem("fabtriage-guide", "closed"); } catch (e) {} $("#guide").remove(); };
   $("#qsplit").onchange = (e) => { state.queueSplit = e.target.value; renderShift(); };
   for (const tr of document.querySelectorAll("tr.row")) {
     const open = () => { state.method = "agent"; showView("console"); selectCase(tr.dataset.case); };
@@ -608,9 +666,9 @@ function verdictCard(run, evStep, withSignoff, live) {
   const claim = (cl) => `<li><span><span class="chip" data-step="${evStep[cl.evidence_id] || ""}">${esc(cl.evidence_id)}</span></span><span>${esc(cl.statement)}</span></li>`;
   const top = d.claims.slice(0, 3).map(claim).join(""), rest = d.claims.slice(3).map(claim).join("");
   const tries = c.disposition_tries || 1;
-  const verifier = tries > 1 ? `The verifier sent it back ${tries - 1} time${tries > 2 ? "s" : ""} before accepting it.` : "The verifier accepted it on the first try.";
+  const verifier = tries > 1 ? `The ${term("Verifier", "verifier")} sent it back ${tries - 1} time${tries > 2 ? "s" : ""} before accepting it.` : `The ${term("Verifier", "verifier")} accepted it on the first try.`;
   return `<section class="verdict ${holds ? "stop" : "go"}">
-    <div class="vhead"><span class="vlabel">${holds ? "Hold" : "Release"}</span><h2>${esc(CAUSES[d.cause] || d.cause)}</h2></div>
+    <div class="vhead">${term(holds ? "Hold" : "Release", holds ? "Hold" : "Release", "vlabel")}<h2>${esc(CAUSES[d.cause] || d.cause)}</h2></div>
     <div class="actions">${acts}</div>
     <p class="summary">${esc(d.summary)}</p>
     <ul class="claims">${top}</ul>

@@ -112,6 +112,15 @@ Assumptions, from `python -m fabtriage impact`: a manual investigation of a held
 
 ## Run it
 
+See it without an API key:
+
+```bash
+pip install -r requirements.txt
+python -m fabtriage demo      # opens the read-only demo in your browser
+```
+
+Everything else:
+
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt

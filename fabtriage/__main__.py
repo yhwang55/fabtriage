@@ -50,6 +50,8 @@ def main(argv=None) -> None:
     rs.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "all"])
     im = sub.add_parser("impact", help="per-100-alarm impact under stated assumptions")
     im.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "all"])
+    dm = sub.add_parser("demo", help="open the read-only demo from docs/demo; no API key needed")
+    dm.add_argument("--port", type=int, default=8771)
     ex = sub.add_parser("export", help="write the console as a static read-only site")
     ex.add_argument("--out", default="docs/demo")
     sv = sub.add_parser("serve")
@@ -90,6 +92,28 @@ def main(argv=None) -> None:
         print("per 100 alarms".ljust(18) + "".join(c[:16].rjust(18) for c in cols))
         for method, row in t["methods"].items():
             print(method.ljust(18) + "".join(str(row[c]).rjust(18) for c in cols))
+    elif args.cmd == "demo":
+        import functools
+        import http.server
+        import threading
+        import webbrowser
+
+        root = Path(__file__).resolve().parent.parent / "docs" / "demo"
+        if not (root / "index.html").exists():
+            raise SystemExit("docs/demo is missing. Build it with: python -m fabtriage export --out docs/demo")
+        class Quiet(http.server.SimpleHTTPRequestHandler):
+            def log_message(self, *a):
+                pass
+
+        handler = functools.partial(Quiet, directory=str(root))
+        srv = http.server.ThreadingHTTPServer(("127.0.0.1", args.port), handler)
+        url = f"http://127.0.0.1:{args.port}/"
+        print(f"FabTriage demo (read-only, saved runs): {url}  (Ctrl+C to stop)", flush=True)
+        threading.Timer(0.8, lambda: webbrowser.open(url)).start()
+        try:
+            srv.serve_forever()
+        except KeyboardInterrupt:
+            pass
     elif args.cmd == "export":
         from .export import export
 
