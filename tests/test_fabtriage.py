@@ -113,6 +113,7 @@ def test_number_extraction_ignores_ids():
     assert verify.numbers_in("LOT-1239 on DEP01-A via MET02 cited E4 read 517.67") == ["517.67"]
     assert verify.grounded("517.7", [517.67])
     assert not verify.grounded("517.9", [517.67])
+    assert verify.numbers_in("slope 1.2 A per 100 wafers") == ["1.2"]
 
 
 # ------------------------------------------------------------------ fake models
@@ -189,3 +190,54 @@ def test_agent_loop_recovers_from_a_refusal(backend, fake, tmp_path):
     assert out["tokens"] > 0
     row = evaluate.score(case, inv)
     assert row["decision_correct"] and row["cause_correct"]
+
+
+def test_verifier_off_accepts_but_records_problems(tmp_path):
+    case = sim.load("metrology_error-1")
+    inv = Investigation(case, tmp_path)
+    inv.verify_enabled = False
+    a = inv.call("get_alarm", {})
+    r = inv.call(
+        "submit_disposition",
+        {
+            "cause": "metrology",
+            "actions": [{"type": "release_lot", "target": a["alarm"]["lot_id"]}],
+            "claims": [{"evidence_id": a["evidence_id"], "statement": "Read 999.1."}],
+            "summary": "x",
+        },
+    )
+    assert r["accepted"]
+    row = evaluate.score(case, inv)
+    assert row["ungrounded_claims"] and row["playbook_rule_broken"]
+
+
+def test_oneshot_with_fake_model(tmp_path):
+    from fabtriage.oneshot import run_oneshot
+
+    case = sim.load("pm_shift-3")
+    inv = Investigation(case, tmp_path)
+    c, lot = case.alarm["chamber"], case.alarm["lot_id"]
+    reply = json.dumps({
+        "cause": "chamber",
+        "actions": [{"type": "hold_lot", "target": lot}, {"type": "hold_chamber", "target": c}],
+        "claims": [{"evidence_id": "E1", "statement": f"Alarm value {case.alarm['value']}."}],
+        "summary": "x",
+    })
+    client = SimpleNamespace(responses=SimpleNamespace(create=lambda **kw: SimpleNamespace(output_text="Here: " + reply, usage=SimpleNamespace(total_tokens=10))))
+    out = run_oneshot(inv, client, "meta")
+    assert inv.status == "awaiting_signoff" and out["tokens"] == 10
+    row = evaluate.score(case, inv)
+    assert row["decision_correct"] and not row["ungrounded_claims"]
+    assert row["playbook_rule_broken"]  # one claim only, and no chamber comparison cited
+
+
+def test_voice_multipart_and_guards(monkeypatch):
+    from fabtriage import voice
+
+    body, kind = voice.multipart({"request": '{"model": "m"}'}, {"audio": ("n.wav", b"RIFFxx", "audio/wav")})
+    boundary = kind.split("boundary=")[1]
+    assert body.count(boundary.encode()) == 3 and b'name="audio"; filename="n.wav"' in body
+    monkeypatch.delenv("MODEL_API_KEY", raising=False)
+    assert "error" in voice.transcribe(b"RIFF")
+    monkeypatch.setenv("MODEL_API_KEY", "k")
+    assert "error" in voice.transcribe(b"not a wav")

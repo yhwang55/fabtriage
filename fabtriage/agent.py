@@ -14,7 +14,7 @@ import time
 from .client import BACKENDS, model_for
 from .tools import DEFINITIONS, Investigation
 
-MAX_TURNS = int(os.environ.get("MAX_TURNS", "16"))
+MAX_TURNS = int(os.environ.get("MAX_TURNS", "20"))
 
 SYSTEM = """You are FabTriage, an investigation agent for the CVD deposition area of a memory fab.
 When an alarm fires you find the most likely root cause, decide what happens to the alarm lot and

@@ -21,7 +21,7 @@ RUNS = Path("runs")
 
 
 def _clients(method: str, backend: str):
-    if method != "agent":
+    if method not in ("agent", "agent_noverify", "oneshot"):
         return None, None
     client = make_client(backend)
     sam = make_client("meta") if has_key("meta") else None
@@ -35,17 +35,17 @@ def main(argv=None) -> None:
     c = sub.add_parser("cases")
     c.add_argument("--split", default="all", choices=["dev", "holdout", "all"])
     e = sub.add_parser("eval")
-    e.add_argument("--method", required=True, choices=["agent", "playbook", "always_hold"])
+    e.add_argument("--method", required=True, choices=["agent", "agent_noverify", "oneshot", "playbook", "always_hold"])
     e.add_argument("--split", default="dev", choices=["dev", "holdout", "all"])
     e.add_argument("--backend", default="meta", choices=["meta", "baseten"])
     e.add_argument("--limit", type=int)
     e.add_argument("--only", nargs="*", help="scenario name prefixes, e.g. pm_shift heater_drift")
     r = sub.add_parser("run")
     r.add_argument("--case", required=True)
-    r.add_argument("--method", default="agent", choices=["agent", "playbook", "always_hold"])
+    r.add_argument("--method", default="agent", choices=["agent", "agent_noverify", "oneshot", "playbook", "always_hold"])
     r.add_argument("--backend", default="meta", choices=["meta", "baseten"])
     rs = sub.add_parser("rescore", help="rebuild a results file from saved runs")
-    rs.add_argument("--method", required=True, choices=["agent", "playbook", "always_hold"])
+    rs.add_argument("--method", required=True, choices=["agent", "agent_noverify", "oneshot", "playbook", "always_hold"])
     rs.add_argument("--split", default="dev", choices=["dev", "holdout", "all"])
     sv = sub.add_parser("serve")
     sv.add_argument("--port", type=int, default=8770)
@@ -80,8 +80,8 @@ def main(argv=None) -> None:
         for path in sorted(RUNS.glob(f"results_*_{args.split}.json")):
             data = json.loads(path.read_text())
             rows.append((data["method"], data["summary"]))
-        keys = ["n", "cause_accuracy", "decision_accuracy", "missed_faults", "needless_holds",
-                "accepted_rate", "avg_tool_calls", "avg_measurements", "avg_lot_delay_h", "total_tokens"]
+        keys = ["n", "decision_accuracy", "missed_faults", "needless_holds", "ungrounded_cases",
+                "rule_broken_cases", "avg_tool_calls", "avg_measurements", "avg_lot_delay_h", "total_tokens"]
         print("method".ljust(12) + "".join(k[:14].rjust(15) for k in keys))
         for method, s in rows:
             print(method.ljust(12) + "".join(str(s.get(k)).rjust(15) for k in keys))

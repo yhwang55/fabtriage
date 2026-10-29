@@ -25,7 +25,7 @@ alarm ──> Muse Spark agent ──picks one tool per turn──> investigatio
 - **Virtual fab** (`fabtriage/sim.py`): CLEAN (2 tools) → CVD DEP (4 chambers on 2 tools) → MET (2 tools). 72 hours of history, about half the lots sampled at 49 sites, FDC sensors on every run, chamber buildup drift, PM resets, run-to-run compensation.
 - **Tools** (`fabtriage/tools.py`): alarm, lot history, lot table query, chamber box-plot summary, trends, commonality analysis (ANOVA per step), FDC summary, PM log, re-measurement (costs lot delay), and a wafer map segmented by **SAM 3.1**. All numbers are computed in code; the model decides what to look at.
 - **Verification** (`fabtriage/verify.py`): runs inside `submit_disposition`, so the agent can't skip it. Every claim must cite an evidence id and every number in it must appear in that evidence. Playbook rules apply too, for example an out-of-spec lot can't be released without an in-spec re-measurement. It never sees the ground truth.
-- **Models**: Muse Spark 1.3 (Meta Model API) runs the agent; SAM 3.1 reads wafer maps; Muse Spark Open on Baseten runs batch benchmarks.
+- **Models**: Muse Spark 1.3 (Meta Model API) runs the agent; SAM 3.1 reads wafer maps; Muse Voice Transcribe turns spoken sign-off notes into text; Muse Spark Open on Baseten runs the same agent on open weights.
 
 ## Benchmark
 
@@ -83,7 +83,7 @@ Each run writes `runs/<method>/<case>/run.json` with the full trace, refusals, c
 python -m fabtriage serve     # http://127.0.0.1:8770
 ```
 
-Pick an alarm and watch the investigation step by step: each tool call with its evidence id, the agent's reasoning, verifier refusals, the final disposition with every claim linked back to its evidence, the chamber's SPC chart and the SAM-segmented wafer maps. An engineer approves the disposition, or rejects it with a note and the agent investigates again with that note. The Benchmark tab compares the agent with the baselines.
+Pick an alarm and watch the investigation step by step: each tool call with its evidence id, the agent's reasoning, verifier refusals, the final disposition with every claim linked back to its evidence, the chamber's SPC chart and the SAM-segmented wafer maps. An engineer approves the disposition, or rejects it with a note and the agent investigates again with that note. The note can be spoken: the console records it and Muse Voice Transcribe turns it into text, because typing in cleanroom gloves is slow. The Benchmark tab compares the agent with the baselines.
 
 ## Scope note
 

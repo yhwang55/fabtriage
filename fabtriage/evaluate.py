@@ -18,6 +18,9 @@ from . import sim
 from .tools import Investigation
 
 
+MODEL_METHODS = ("agent", "agent_noverify", "oneshot")
+
+
 def score(case: sim.Case, inv: Investigation) -> dict:
     truth = case.truth
     d = inv.disposition or {"cause": None, "actions": []}
@@ -40,6 +43,8 @@ def score(case: sim.Case, inv: Investigation) -> dict:
         "missed_fault": truth["real_fault"] and ("hold_lot", lot) not in actions,
         "needless_hold": bool(holds - needed_holds),
         "confounder": truth.get("confounder"),
+        "ungrounded_claims": any(p.startswith("claim") for p in inv.posthoc_problems),
+        "playbook_rule_broken": any(p.startswith("rule:") for p in inv.posthoc_problems),
         **inv.costs(),
     }
 
@@ -57,6 +62,8 @@ def summarize(rows: list) -> dict:
         "missed_faults": sum(1 for r in rows if r["missed_fault"]),
         "needless_holds": sum(1 for r in rows if r["needless_hold"]),
         "accepted_rate": rate("accepted"),
+        "ungrounded_cases": sum(1 for r in rows if r.get("ungrounded_claims")),
+        "rule_broken_cases": sum(1 for r in rows if r.get("playbook_rule_broken")),
         "avg_tool_calls": round(sum(r["tool_calls"] for r in rows) / n, 2),
         "avg_measurements": round(sum(r["measurements"] for r in rows) / n, 2),
         "avg_lot_delay_h": round(sum(r["lot_delay_h"] for r in rows) / n, 2),
@@ -76,16 +83,23 @@ def run_one(
     keep: dict | None = None,
 ) -> dict:
     case = sim.load(case_id)
-    run_dir = runs_dir / method / case_id
-    inv = Investigation(case, run_dir, client=sam_client if method == "agent" else None)
+    label = method if backend in (None, "meta") or method not in MODEL_METHODS else f"{method}_{backend}"
+    run_dir = runs_dir / label / case_id
+    uses_model = method in MODEL_METHODS
+    inv = Investigation(case, run_dir, client=sam_client if uses_model else None)
+    inv.verify_enabled = method not in ("agent_noverify", "oneshot")
     inv.autosave = autosave
-    inv.live_extra = {"method": method, "live": True, **(keep or {})}
+    inv.live_extra = {"method": label, "live": True, **(keep or {})}
     extra = dict(keep or {})
     t0 = time.time()
-    if method == "agent":
+    if method in ("agent", "agent_noverify"):
         from .agent import run_agent
 
         extra.update(run_agent(inv, client, backend=backend, engineer_note=engineer_note))
+    elif method == "oneshot":
+        from .oneshot import run_oneshot
+
+        extra.update(run_oneshot(inv, client, backend=backend))
     else:
         from .baselines import BASELINES
 
@@ -93,7 +107,7 @@ def run_one(
     extra["seconds"] = round(time.time() - t0, 1)
     row = score(case, inv)
     row["tokens"] = extra.get("tokens", 0)
-    inv.save({"method": method, "score": row, **extra})
+    inv.save({"method": label, "score": row, **extra})
     return row
 
 
@@ -115,7 +129,8 @@ def run_split(
             flush=True,
         )
         rows.append(row)
-    return write_results(method, split, runs_dir, rows)
+    label = method if backend in (None, "meta") or method not in MODEL_METHODS else f"{method}_{backend}"
+    return write_results(label, split, runs_dir, rows)
 
 
 def write_results(method: str, split: str, runs_dir: Path, rows: list, fresh: bool = False) -> dict:

@@ -19,8 +19,11 @@ _NUM = re.compile(r"(?<![\w.])-?\d+(?:\.\d+)?")
 FREE_NUMBERS = {sim.LSL, sim.USL, sim.LCL, sim.UCL, sim.TARGET}
 
 
+_UNITS = re.compile(r"\bper\s+100\s+wafers?\b", re.I)  # "A per 100 wafers" is a unit, not a claim
+
+
 def numbers_in(text: str) -> list:
-    return [m.group(0) for m in _NUM.finditer(_ID.sub(" ", text))]
+    return [m.group(0) for m in _NUM.finditer(_ID.sub(" ", _UNITS.sub(" ", text)))]
 
 
 def _flatten(obj, out):

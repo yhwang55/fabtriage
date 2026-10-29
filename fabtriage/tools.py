@@ -206,6 +206,8 @@ class Investigation:
         self.status = "running"
         self.disposition = None
         self.refusals: list = []
+        self.verify_enabled = True  # False only for the ablation: problems are recorded but not enforced
+        self.posthoc_problems: list = []
         self.notes: list = []  # the agent's visible reasoning, {"step": n, "text": ...}
         self.autosave = False  # write run.json after every tool call (live view in the console)
         self.live_extra: dict = {}
@@ -473,6 +475,11 @@ class Investigation:
         self.tries += 1
         disposition = {"cause": cause, "actions": actions, "claims": claims, "summary": summary}
         problems = verify.check(self, disposition)
+        if not self.verify_enabled:  # ablation: accept anything, but keep what the verifier would have said
+            self.posthoc_problems = problems
+            self.disposition = disposition
+            self.status = "awaiting_signoff"
+            return {"accepted": True, "status": "awaiting_signoff", "note": "Sent to the engineer for sign-off."}
         if not problems:
             self.disposition = disposition
             self.status = "awaiting_signoff"
@@ -500,6 +507,8 @@ class Investigation:
             "status": self.status,
             "disposition": self.disposition,
             "refusals": self.refusals,
+            "verifier_enabled": self.verify_enabled,
+            "posthoc_problems": self.posthoc_problems,
             "costs": self.costs(),
             "trace": self.trace,
             "notes": self.notes,
