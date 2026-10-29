@@ -260,6 +260,7 @@ table.sum tr.agent td { font-weight: 600; }
   <nav class="tabs" role="tablist">
     <button role="tab" aria-selected="true" data-view="shift" data-i18n="tab_shift">Alarm queue</button>
     <button role="tab" aria-selected="false" data-view="console" data-i18n="tab_console">Investigations</button>
+    <button role="tab" aria-selected="false" data-view="recovery" data-i18n="tab_recovery">Recovery after PM</button>
     <button role="tab" aria-selected="false" data-view="bench" data-i18n="tab_bench">Benchmark</button>
   </nav>
   <div class="lang" role="group" aria-label="Language"><button data-lang="en" aria-pressed="true">EN</button><button data-lang="ko" aria-pressed="false">KR</button></div>
@@ -271,6 +272,11 @@ table.sum tr.agent td { font-weight: 600; }
   <div class="col list" id="list" aria-label="Alarms"></div>
   <div class="col"><div class="traveler" id="traveler"></div></div>
   <aside class="col side" id="side"></aside>
+</main>
+<main class="console" id="recovery" hidden>
+  <div class="col list" id="rlist" aria-label="Recoveries"></div>
+  <div class="col"><div class="traveler" id="rtraveler"></div></div>
+  <aside class="col side" id="rside"></aside>
 </main>
 <main id="bench" class="bench" hidden></main>
 
@@ -288,6 +294,7 @@ const UI = {
   tab_shift: ["Alarm queue", "알람 대기열"],
   tab_console: ["Investigations", "조사 기록"],
   tab_bench: ["Benchmark", "성능 비교"],
+  tab_recovery: ["Recovery after PM", "PM 후 복구"],
   banner: ["Read-only demo built from saved runs. Live investigations, sign-off and voice notes run in the local version:",
     "저장된 실행 기록으로 만든 읽기 전용 데모입니다. 실시간 조사, 승인, 음성 메모는 로컬 버전에서 쓸 수 있습니다:"],
 };
@@ -376,13 +383,15 @@ function staticPath(path) {
   if (u.pathname === "/api/benchmark") return "data/benchmark.json";
   if (u.pathname === "/api/context") return `data/context/${q.case}.json`;
   if (u.pathname === "/api/run") return `data/run/${q.method}/${q.case}.json`;
+  if (u.pathname === "/api/recovery/cases") return "data/recovery/cases.json";
+  if (u.pathname === "/api/recovery/run") return `data/recovery/run/${q.method}/${q.case}.json`;
   return null;
 }
 async function api(path, body) {
   if (STATIC) {
     if (body) return { error: L("This is the read-only demo. Live investigations and sign-off run in the local version (see the README).", "읽기 전용 데모입니다. 실시간 조사와 승인은 로컬 버전에서 쓸 수 있습니다 (README 참고).") };
     const r = await fetch(staticPath(path));
-    if (!r.ok) return path.startsWith("/api/run") ? { run: null, live: false } : {};
+    if (!r.ok) return path.startsWith("/api/run") || path.startsWith("/api/recovery/run") ? { run: null, live: false } : {};
     return r.json();
   }
   const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
@@ -1030,12 +1039,222 @@ async function renderBench() {
     }
     html += `</table>`;
   }
+  html += recBench(data);
   $("#bench").innerHTML = html;
+}
+
+/* ---------------- recovery after PM ---------------- */
+const REC_NAMES = {
+  agent: ["Agent", "에이전트"], monitor_rule: ["Two monitor wafers", "모니터 웨이퍼 2장 규칙"],
+  reset_recipe: ["Baseline recipe", "기준 레시피 복귀"], keep_recipe: ["Keep the recipe", "레시피 유지"],
+};
+const REC_TOOLS = {
+  get_recovery_brief: ["Read the PM record", "PM 기록 확인"], get_chamber_history: ["Read the chamber history", "챔버 이력 확인"],
+  get_metrology_matching: ["Checked metrology matching", "계측 장비 매칭 확인"], run_monitor_wafer: ["Ran a monitor wafer", "모니터 웨이퍼 진행"],
+  estimate_recipe: ["Estimated the recipe", "레시피 계산"], release_chamber: ["Released the chamber", "챔버 해제"],
+};
+const REC_SCEN = {
+  post_pm_reset: ["Clean reset the rate", "세정으로 증착 속도 복귀"], seasoning: ["Seasoning skipped", "시즈닝 생략"],
+  fast_drift: ["New part, fast drift", "새 부품, 빠른 드리프트"], metrology_bias: ["Metrology tool offset", "계측 장비 오프셋"],
+  no_shift: ["Nothing changed", "변화 없음"],
+};
+const recName = (m) => REC_NAMES[m][KO() ? 1 : 0];
+const CRIT_KO = {
+  "at least 30% fewer off-target lots than keep_recipe": "레시피 유지보다 관리 한계 이탈 lot 30% 이상 감소",
+  "no more off-target lots than the best guide rule": "가장 좋은 가이드 규칙보다 이탈 lot이 많지 않음",
+  "no out-of-spec lots caused (worst repeat)": "규격 이탈 lot 없음 (가장 나쁜 반복 기준)",
+  "at most 3 monitor wafers per recovery on average": "복구당 모니터 웨이퍼 평균 3장 이하",
+  "no_shift recipe change at most 1% (worst repeat)": "변화 없는 경우 레시피 변경 1% 이하 (가장 나쁜 반복 기준)",
+};
+const rstate = { cases: [], caseId: null, method: "agent", run: null, base: null, showTruth: false, loaded: false };
+
+async function loadRecovery() {
+  const data = await api("/api/recovery/cases");
+  rstate.cases = data.cases || [];
+  rstate.loaded = true;
+  renderRecList();
+  if (!rstate.caseId && rstate.cases.length) selectRec(rstate.cases[0].case_id);
+}
+function renderRecList() {
+  const groups = KO() ? { dev: "개발 세트", holdout: "평가 세트", holdout2: "새 평가 세트" } : { dev: "Development", holdout: "Held-out", holdout2: "Fresh held-out" };
+  let html = "";
+  for (const [split, label] of Object.entries(groups)) {
+    html += `<div class="group">${label}</div>`;
+    for (const c of rstate.cases.filter((x) => x.split === split)) {
+      const r = c.runs.agent;
+      const tail = r ? L(`${r.off_target_lots} off target`, `이탈 lot ${r.off_target_lots}`) : L("no agent run yet", "에이전트 실행 전");
+      html += `<button class="alarm-row" data-case="${c.case_id}" aria-current="${c.case_id === rstate.caseId}">
+        <span class="kind">PM</span>
+        <span class="what"><b>${esc(c.chamber)}, ${esc(c.pm.pm_id)}</b><span>${esc(tail)}</span></span><span></span></button>`;
+    }
+  }
+  $("#rlist").innerHTML = html;
+  for (const b of document.querySelectorAll("#rlist .alarm-row")) b.onclick = () => selectRec(b.dataset.case);
+}
+async function selectRec(id) {
+  rstate.caseId = id; rstate.showTruth = false;
+  renderRecList();
+  await loadRec();
+}
+async function loadRec() {
+  const [a, b] = await Promise.all([
+    api(`/api/recovery/run?method=${rstate.method}&case=${rstate.caseId}`),
+    api(`/api/recovery/run?method=keep_recipe&case=${rstate.caseId}`),
+  ]);
+  rstate.run = a.run; rstate.base = b.run;
+  renderRec(); renderRecSide();
+}
+function recFinding(s) {
+  const r = s.result || {};
+  if (r.error) return `<span class="soft">${L("Refused", "거부됨")}: ${esc(r.error)}</span>`;
+  switch (s.tool) {
+    case "get_recovery_brief": {
+      const pm = r.pm_record;
+      return L(`${esc(pm.work)}. Parts replaced: ${esc(pm.parts_replaced.join(", ") || "none")}. Seasoning: ${esc(pm.seasoning)}. Pre-PM recipe ${r.pre_pm_recipe_time_s} s, baseline ${r.baseline_recipe_time_s_clean_chamber} s.`,
+        `작업: ${esc(pm.work)}. 교체 부품: ${esc(pm.parts_replaced.join(", ") || "없음")}. 시즈닝: ${esc(pm.seasoning)}. PM 전 레시피 ${r.pre_pm_recipe_time_s}초, 기준 ${r.baseline_recipe_time_s_clean_chamber}초.`);
+    }
+    case "get_chamber_history": {
+      const rows = r.earlier_pms.map((p) => `<tr><td>${esc(p.work)}</td><td>${esc(p.seasoning)}</td><td>${p.first_wafers_vs_later_A}</td><td>${p.thickness_slope_A_per_lot_first_40}</td></tr>`).join("");
+      return `${L(`Previous cycle ended at ${r.mean_thickness_last_10_A} Å (last 10 lots).`, `이전 주기 마지막 10개 lot 평균 ${r.mean_thickness_last_10_A} Å.`)}
+        <table class="mini"><tr><th>${L("Earlier PM", "이전 PM")}</th><th>${L("Seasoning", "시즈닝")}</th><th>${L("First wafers vs later, Å", "첫 웨이퍼 차이, Å")}</th><th>${L("Slope, Å per lot", "lot당 기울기, Å")}</th></tr>${rows}</table>`;
+    }
+    case "get_metrology_matching":
+      return L(`On a 500 Å reference wafer MET01 read ${r.MET01_reads_A}, MET02 read ${r.MET02_reads_A}: MET02 − MET01 = <b>${r.MET02_minus_MET01_A} Å</b>.`,
+        `500 Å 기준 웨이퍼를 MET01은 ${r.MET01_reads_A}, MET02는 ${r.MET02_reads_A}로 읽었습니다. 차이(MET02 − MET01) <b>${r.MET02_minus_MET01_A} Å</b>.`);
+    case "run_monitor_wafer":
+      return L(`${esc(r.wafer)} at ${r.time_s} s, measured on ${esc(r.met_tool)}: <b>${r.thickness_A} Å</b>. Run ${r.runs_since_pm} since PM.`,
+        `${esc(r.wafer)}, ${r.time_s}초, ${esc(r.met_tool)} 측정: <b>${r.thickness_A} Å</b>. PM 후 ${r.runs_since_pm}번째 런.`);
+    case "estimate_recipe": {
+      const off = Object.entries(r.offsets_applied_A || {}).map(([k, v]) => `${k} ${v} Å`).join(", ");
+      return L(`From ${esc(r.monitors_used.join(", "))}${off ? `, correcting ${off}` : ""}: rate ${r.rate_A_per_s} Å/s, <b>${r.recipe_time_s_for_500A} s</b> for 500 Å (${r.change_vs_pre_pm_pct}% vs pre-PM).`,
+        `${esc(r.monitors_used.join(", "))} 기준${off ? `, ${off} 보정` : ""}: 증착 속도 ${r.rate_A_per_s} Å/s, 500 Å에 <b>${r.recipe_time_s_for_500A}초</b> (PM 전 대비 ${r.change_vs_pre_pm_pct}%).`);
+    }
+    default: return "";
+  }
+}
+function recVerdict(run) {
+  if (!run) return "";
+  const sc = run.score || {}, c = run.costs || {};
+  if (run.status !== "released") {
+    return `<section class="verdict pending"><div class="vhead"><span class="vlabel">${L("Needs an engineer", "엔지니어 확인 필요")}</span><h2>${L("The verifier refused three times", "검증기가 세 번 거부했습니다")}</h2></div>
+      <p class="summary">${L("An engineer takes over with the two-monitor rule; the extra chamber time is counted.", "엔지니어가 모니터 웨이퍼 2장 규칙으로 넘겨받고, 늘어난 장비 시간은 비용에 넣습니다.")}</p></section>`;
+  }
+  const rel = run.release;
+  const claims = (rel.claims || []).map((cl) => `<li><span><span class="chip">${esc(cl.evidence_id)}</span></span><span>${esc(cl.statement)}</span></li>`).join("");
+  const ctrl = KO()
+    ? `EWMA λ ${rel.ewma_lambda}${rel.drift_A_per_lot ? `, 드리프트 선보정 lot당 ${rel.drift_A_per_lot} Å` : ""}. PM 전 대비 레시피 ${sc.recipe_change_pct}%.`
+    : `EWMA λ ${rel.ewma_lambda}${rel.drift_A_per_lot ? `, drift pre-compensation ${rel.drift_A_per_lot} Å per lot` : ""}. Recipe ${sc.recipe_change_pct}% vs pre-PM.`;
+  const outcome = KO()
+    ? `다음 40개 lot: 관리 한계 이탈 <b>${sc.off_target_lots}</b>개, 규격 이탈 <b>${sc.out_of_spec_lots}</b>개 (시뮬레이션).`
+    : `Next 40 lots: <b>${sc.off_target_lots}</b> outside control limits, <b>${sc.out_of_spec_lots}</b> out of spec (simulated).`;
+  const meta = KO()
+    ? `모니터 웨이퍼 ${c.monitor_wafers}장 (장비 정지 ${c.downtime_h}시간), 도구 호출 ${c.tool_calls}번, 제출 ${c.release_tries}번.${rstate.method === "agent" ? " 요약과 근거는 에이전트가 쓴 영어 원문입니다." : ""}`
+    : `${c.monitor_wafers} monitor wafer${c.monitor_wafers === 1 ? "" : "s"} (${c.downtime_h} h of chamber time), ${c.tool_calls} tool calls, ${c.release_tries} release attempt${c.release_tries === 1 ? "" : "s"}.`;
+  return `<section class="verdict go"><div class="vhead">${term("Release", L("Released", "해제"), "vlabel")}<h2>${L(`at ${rel.time_s} s`, `레시피 ${rel.time_s}초`)}</h2></div>
+    <div class="actions">${ctrl}</div>
+    <p class="summary">${outcome}</p>
+    ${rstate.method === "agent" ? `<p class="summary">${esc(rel.summary)}</p><ul class="claims">${claims}</ul>` : ""}
+    <div class="vmeta">${meta}</div></section>`;
+}
+function renderRec() {
+  const c = rstate.cases.find((x) => x.case_id === rstate.caseId);
+  if (!c) { $("#rtraveler").innerHTML = ""; return; }
+  const run = rstate.run;
+  const btns = Object.keys(REC_NAMES).map((m) => `<button aria-pressed="${m === rstate.method}" data-rm="${m}">${recName(m)}</button>`).join("");
+  let html = `<div class="alarm-head"><div><h1>${L(`${esc(c.chamber)} after ${esc(c.pm.pm_id)}`, `${esc(c.chamber)}, ${esc(c.pm.pm_id)} 이후`)}</h1>
+      <div class="sub">${L(`Held after PM. Pre-PM recipe ${c.pre_pm_time_s} s. Bring it back to 500 Å and release it.`, `PM 뒤 홀드된 상태입니다. PM 전 레시피 ${c.pre_pm_time_s}초. 500 Å로 되돌려 생산에 내보내야 합니다.`)}</div></div></div>
+    <div class="methods"><div class="seg" role="group">${btns}</div></div>`;
+  if (!run) {
+    html += `<p class="empty">${L("No run for this method yet. Agent runs need the API key; see the README.", "이 방법은 아직 실행 기록이 없습니다. 에이전트 실행에는 API 키가 필요합니다 (README 참고).")}</p>`;
+  } else {
+    html += recVerdict(run);
+    const notesAt = {};
+    for (const n of run.notes || []) (notesAt[n.step ?? n.turn] ||= []).push(n.text);
+    html += `<h3 class="routehead">${L("How it got there", "결론까지의 과정")}</h3><ol class="route">`;
+    run.trace.forEach((s, i) => {
+      const n = i + 1, r = s.result || {};
+      const thought = (notesAt[n] || []).map((t) => `<div class="thought">${esc(t)}</div>`).join("");
+      if (s.tool === "release_chamber") {
+        const ok = r.accepted;
+        html += `<li class="step ${ok ? "final" : "refused"}"><span class="n">${n}</span><div class="body">${thought}<div class="title"><b>${ok ? L("Released the chamber", "챔버 해제") : L("Verifier refused the release", "검증기가 해제를 거부함")}</b></div>
+          ${ok ? "" : `<ul>${(r.problems || []).map((p) => `<li>${esc(p.replace(/^rule: /, ""))}</li>`).join("")}</ul>`}</div></li>`;
+        return;
+      }
+      html += `<li class="step"><span class="n">${n}</span><div class="body">${thought}
+        <div class="title"><b>${(REC_TOOLS[s.tool] || [s.tool, s.tool])[KO() ? 1 : 0]}</b>${r.evidence_id ? `<span class="chip">${r.evidence_id}</span>` : ""}</div>
+        <div class="finding">${recFinding(s)}</div></div></li>`;
+    });
+    html += `</ol>`;
+  }
+  $("#rtraveler").innerHTML = html;
+  for (const b of document.querySelectorAll("[data-rm]")) b.onclick = () => { rstate.method = b.dataset.rm; loadRec(); };
+}
+function recChart(run, base) {
+  const W = 320, H = 200, P = { l: 34, r: 8, t: 10, b: 22 };
+  const lots = run.outcome.lots, bl = base && base.outcome ? base.outcome.lots : [];
+  const vals = lots.map((l) => l.true_A).concat(bl.map((l) => l.true_A), [sim_LSL, sim_USL]);
+  const lo = Math.min(...vals) - 2, hi = Math.max(...vals) + 2;
+  const x = (k) => P.l + ((k - 1) / (lots.length - 1)) * (W - P.l - P.r);
+  const y = (v) => P.t + (1 - (v - lo) / (hi - lo)) * (H - P.t - P.b);
+  const hl = (v, color, dash) => `<line x1="${P.l}" x2="${W - P.r}" y1="${y(v)}" y2="${y(v)}" stroke="${color}" stroke-dasharray="${dash}"/><text x="${P.l - 4}" y="${y(v) + 3}" text-anchor="end">${v}</text>`;
+  let s = `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img" aria-label="Film thickness of the 40 lots after release">`;
+  s += hl(sim_USL, "var(--hold)", "4 3") + hl(sim_LSL, "var(--hold)", "4 3") + hl(507, "var(--amber)", "2 3") + hl(493, "var(--amber)", "2 3") + hl(500, "var(--line)", "");
+  if (bl.length && rstate.method !== "keep_recipe") s += `<polyline fill="none" stroke="var(--line)" stroke-width="1.5" points="${bl.map((l) => `${x(l.lot)},${y(l.true_A)}`).join(" ")}"/>`;
+  s += `<polyline fill="none" stroke="var(--ink)" stroke-width="1.5" points="${lots.map((l) => `${x(l.lot)},${y(l.true_A)}`).join(" ")}"/>`;
+  for (const l of lots) if (Math.abs(l.true_A - 500) > 7) s += `<circle cx="${x(l.lot)}" cy="${y(l.true_A)}" r="3" fill="var(--hold)"><title>lot ${l.lot}: ${l.true_A}</title></circle>`;
+  s += `<text x="${P.l}" y="${H - 6}">${L("lot 1", "lot 1")}</text><text x="${W - P.r}" y="${H - 6}" text-anchor="end">${L("lot 40", "lot 40")}</text></svg>`;
+  return s;
+}
+const sim_LSL = 485, sim_USL = 515;
+function renderRecSide() {
+  const run = rstate.run;
+  if (!run) { $("#rside").innerHTML = ""; return; }
+  const c = run.costs || {};
+  let html = "";
+  if (run.outcome) html += `<section><h2>${L("The 40 lots after release", "해제 후 40개 lot")}</h2>${recChart(run, rstate.base)}
+    <div class="cap">${L(`Black: ${recName(rstate.method)}. Grey: keeping the old recipe. Red dots: outside the control limits. True film, before metrology.`, `검정: ${recName(rstate.method)}. 회색: 기존 레시피 유지. 빨간 점: 관리 한계 이탈. 계측 전 실제 막 두께입니다.`)}</div></section>`;
+  html += `<section><h2>${L("What it cost", "든 비용")}</h2><div class="costs">
+    <span>${L("Monitor wafers", "모니터 웨이퍼")}</span><span>${c.monitor_wafers ?? 0}</span>
+    <span>${L("Chamber time", "장비 정지 시간")}</span><span>${c.downtime_h ?? 0} h</span>
+    <span>${L("Tool calls", "도구 호출")}</span><span>${c.tool_calls ?? 0}</span>
+    ${run.tokens ? `<span>${L("Tokens", "토큰")}</span><span>${Number(run.tokens).toLocaleString()}</span>` : ""}
+    ${run.model ? `<span>${L("Model", "모델")}</span><span>${esc(run.model)}</span>` : ""}</div></section>`;
+  if (run.truth) {
+    const sc = (REC_SCEN[run.truth.scenario] || [run.truth.scenario, run.truth.scenario])[KO() ? 1 : 0];
+    html += `<section><h2>${L("Ground truth", "실제 원인")}</h2>${rstate.showTruth
+      ? `<div class="truth"><b>${esc(sc)}.</b> ${esc(run.truth.explanation)}${KO() ? `<div class="cap">설명은 영어 원문입니다.</div>` : ""}</div>`
+      : `<button class="btn ghost" id="rreveal">${L("Show what really happened", "실제 원인 보기")}</button><div class="cap">${L("Hidden from the agent and the tools. Only for review.", "에이전트와 도구에는 보이지 않는 정보입니다. 검토용으로만 엽니다.")}</div>`}</section>`;
+  }
+  html += `<section><div class="cap">${L("The recovery idea comes from Prof. Jang (The Catholic University of Korea): R2R models lose their footing after PM, so engineers re-center recipes by guide rules and experience.", "PM 후 복구 아이디어는 장재연 교수님(가톨릭대학교)께서 주셨습니다. R2R 모델은 PM 뒤에 기준을 잃기 쉬워서, 엔지니어가 가이드 규칙과 경험으로 레시피를 다시 맞춥니다.")}</div></section>`;
+  $("#rside").innerHTML = html;
+  const rv = $("#rreveal");
+  if (rv) rv.onclick = () => { rstate.showTruth = true; renderRecSide(); };
+}
+function recBench(data) {
+  const rec = data.recovery;
+  if (!rec) return "";
+  const cols = [["off_target_lots", L("Off-target lots", "관리 한계 이탈 lot")], ["out_of_spec_lots", L("Out-of-spec lots", "규격 이탈 lot")], ["avg_monitor_wafers", L("Monitor wafers per recovery", "복구당 모니터 웨이퍼")], ["avg_downtime_h", L("Chamber time, h", "장비 정지, 시간")], ["needs_engineer", L("Sent to an engineer", "엔지니어 이관")], ["no_shift_max_change_pct", L("Change when nothing changed, %", "변화 없을 때 레시피 변경, %")]];
+  let html = `<h1 style="margin-top:40px">${L("Recovery after PM", "PM 후 복구")}</h1><p class="lead">${L("The same chamber, held after PM, recovered by each method. 40 production lots follow each release and are scored on the true film. Success criteria were written before any agent run (docs/RECOVERY.md).", "PM 뒤 홀드된 같은 챔버를 방법마다 복구합니다. 해제 뒤 40개 생산 lot을 실제 막 두께로 채점합니다. 성공 기준은 에이전트를 돌리기 전에 정했습니다 (docs/RECOVERY.md).")}</p>`;
+  for (const [split, title] of [["holdout2", L("Fresh held-out recoveries (after the fix)", "새 평가 세트 (수정 후)")], ["holdout", L("Held-out recoveries", "평가 세트")], ["dev", L("Development recoveries", "개발 세트")]]) {
+    const ms = Object.keys(rec[split] || {});
+    if (!ms.length) continue;
+    html += `<h2>${title}</h2><table class="sum"><tr><th>${L("Method", "방법")}</th>${cols.map((c) => `<th>${c[1]}</th>`).join("")}</tr>`;
+    for (const m of ["agent", "agent_baseten", "monitor_rule", "reset_recipe", "keep_recipe"].filter((m) => rec[split][m])) {
+      const d = rec[split][m], rep = d.repeats;
+      const name = m === "agent_baseten" ? L("Agent (Muse Spark Open)", "에이전트 (Muse Spark Open)") : recName(m);
+      html += `<tr class="${m}"><td>${name}${rep ? `<div class="soft" style="font-size:12px">${L("mean of 3 runs", "3회 평균")}</div>` : ""}</td>${cols.map(([k]) => `<td>${rep && rep[k] ? `${rep[k].mean}${rep[k].std ? ` ± ${rep[k].std}` : ""}` : d.summary[k] ?? "–"}</td>`).join("")}</tr>`;
+    }
+    html += `</table>`;
+    const cr = rec[split + "_criteria"] || [];
+    if (cr.length) html += `<ul class="legend">${cr.map((c) => `<li><b style="color:var(--${c.met ? "release" : "hold"})">${c.met ? L("Met", "충족") : L("Missed", "미달")}</b> ${esc((KO() && CRIT_KO[c.criterion]) || c.criterion)}: ${esc(String(c.value))}</li>`).join("")}</ul>`;
+  }
+  return html;
 }
 
 function showView(view) {
   for (const o of document.querySelectorAll("nav.tabs button")) o.setAttribute("aria-selected", o.dataset.view === view);
-  for (const v of ["shift", "console", "bench"]) $("#" + v).hidden = v !== view;
+  for (const v of ["shift", "console", "recovery", "bench"]) $("#" + v).hidden = v !== view;
+  if (view === "recovery") { if (!rstate.loaded) loadRecovery(); else { renderRecList(); renderRec(); renderRecSide(); } }
   if (view === "bench") renderBench();
   if (view === "shift") renderShift();
 }
@@ -1048,6 +1267,7 @@ function setLang(lang) {
   renderList();
   if (!$("#shift").hidden) renderShift();
   if (!$("#bench").hidden) renderBench();
+  if (!$("#recovery").hidden && rstate.loaded) { renderRecList(); renderRec(); renderRecSide(); }
   if (!$("#console").hidden && state.caseId) {
     if (state.method === "compare") renderCompare(); else renderTraveler(false);
     renderSide();

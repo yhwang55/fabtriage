@@ -87,3 +87,13 @@ The fix is one verifier rule: a negative `drift_A_per_lot` is refused with a mes
 says which sign to use. The tool description now says the same. Because this fix came from
 reading a held-out failure, the fixed version is checked on a fresh held-out set (seeds 7
 and 8) that nobody has looked at.
+
+Fresh held-out (seeds 7 and 8, 10 recoveries, three runs, fixed version): all five criteria
+met. Off-target lots 2, 2 and 2 against 21 for the two-monitor rule, 26 for the baseline
+recipe and 39 for keeping the recipe; no out-of-spec lots; 1.67 monitor wafers per recovery
+against the rule's 2; no recipe change when nothing changed. The 2 lots are the same
+`metrology_bias` effect as in development. The agent used a positive drift in all six
+`fast_drift` runs, so the new sign rule never had to fire; it is a guard, not the reason for
+the result. The verifier sent back three releases over numbers it could not find in the cited
+evidence (one was "40", read from the field name "first 40"); the agent fixed each on the
+next try.

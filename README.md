@@ -130,6 +130,24 @@ thin), a new part drifts fast, a metrology tool reads high, and nothing changed.
 against keeping the old recipe, going back to the baseline recipe, and a two-monitor-wafer
 rule. Success criteria were written before any agent run: [docs/RECOVERY.md](docs/RECOVERY.md).
 
+Results on a fresh held-out set (10 recoveries, agent run 3 times, after one fix described
+below):
+
+| Method | Off-target lots | Out-of-spec lots | Monitor wafers per recovery |
+| --- | --- | --- | --- |
+| Agent (Muse Spark 1.3) | 2 ± 0 | 0 | 1.67 |
+| Two monitor wafers (guide rule) | 21 | 0 | 2 |
+| Back to the baseline recipe | 26 | 3 | 0 |
+| Keep the pre-PM recipe | 39 | 6 | 0 |
+
+All five pre-registered criteria were met on both held-out sets. On the first one, one run in
+30 went badly: the agent copied a thickness slope of -0.82 Å per lot into a field that expects
+thinning as a positive number, and 24 lots went off target. The verifier now refuses a
+negative drift with a message saying which sign to use, and the fixed version was checked on
+the fresh set above. The 2 remaining lots come from a metrology tool that reads high: the agent
+measures its monitor wafers on the good tool, but production feedback still mixes in the
+biased one. Full account: [docs/RECOVERY.md](docs/RECOVERY.md).
+
 ```bash
 python -m fabtriage recover --method monitor_rule --split holdout
 python -m fabtriage recover --method agent --split holdout --repeats 3
