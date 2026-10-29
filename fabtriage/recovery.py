@@ -47,11 +47,17 @@ MAX_TRIES = 3
 
 SCENARIOS = ["post_pm_reset", "seasoning", "fast_drift", "metrology_bias", "no_shift"]
 DEV_SEEDS = [1, 2, 3, 4]
-HOLDOUT_SEEDS = [5, 6]
+HOLDOUT_SEEDS = [5, 6]  # run once on Oct 29; one run in 30 exposed the drift sign mix-up
+HOLDOUT2_SEEDS = [7, 8]  # fresh set for the version with the sign rule
 
 
 def benchmark(split: str = "dev") -> list:
-    seeds = {"dev": DEV_SEEDS, "holdout": HOLDOUT_SEEDS, "all": DEV_SEEDS + HOLDOUT_SEEDS}[split]
+    seeds = {
+        "dev": DEV_SEEDS,
+        "holdout": HOLDOUT_SEEDS,
+        "holdout2": HOLDOUT2_SEEDS,
+        "all": DEV_SEEDS + HOLDOUT_SEEDS + HOLDOUT2_SEEDS,
+    }[split]
     return [f"rec_{s}-{seed}" for s in SCENARIOS for seed in seeds]
 
 
@@ -252,7 +258,7 @@ DEFINITIONS = [
             "properties": {
                 "time_s": {"type": "number", "description": "recipe time to start production with; copy it from evidence"},
                 "ewma_lambda": {"type": "number", "description": "EWMA weight on each new measurement, 0.1 to 0.6; default 0.3"},
-                "drift_A_per_lot": {"type": "number", "description": "expected film thinning per lot for the controller to pre-compensate; 0 for none"},
+                "drift_A_per_lot": {"type": "number", "description": "expected film thinning per lot for the controller to pre-compensate, as a positive number (a history slope of -0.8 A per lot means 0.8); 0 for none"},
                 "claims": {
                     "type": "array",
                     "items": {
@@ -535,6 +541,11 @@ def check(job: RecoveryJob, r: dict) -> list:
     if not 0.1 <= lam <= 0.6:
         problems.append("rule: ewma_lambda must be between 0.1 and 0.6")
     d = r["drift_A_per_lot"]
+    if d < 0:
+        problems.append(
+            f"rule: drift_A_per_lot is the thinning per lot as a positive number; {d} would push the film the wrong way "
+            f"(a thickness slope of {d} A per lot means drift_A_per_lot {abs(d)})"
+        )
     if d:
         if abs(d) > 1.5:
             problems.append("rule: drift_A_per_lot above 1.5 A per lot is not credible")

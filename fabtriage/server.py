@@ -134,7 +134,7 @@ def recovery_cases() -> list:
     from . import recovery as R
 
     out = []
-    for split in ("dev", "holdout"):
+    for split in ("dev", "holdout", "holdout2"):
         for cid in R.benchmark(split):
             c = R.load(cid)
             runs = {}
@@ -168,7 +168,7 @@ def recovery_benchmark() -> dict:
     from . import recovery_eval as RE
 
     out = {}
-    for split in ("dev", "holdout"):
+    for split in ("dev", "holdout", "holdout2"):
         res = RE.load_results(RUNS / "recovery", split)
         out[split] = {m: {"summary": d["summary"], "repeats": (d.get("repeats") or {}).get("mean_std")} for m, d in res.items()}
         out[split + "_criteria"] = RE.criteria(res)

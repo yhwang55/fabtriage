@@ -347,3 +347,19 @@ def test_recovery_agent_loop_with_fake_model(tmp_path):
         RE.run_split(m, "holdout", tmp_path)
     res = RE.load_results(tmp_path, "holdout")
     assert {"keep_recipe", "reset_recipe", "monitor_rule"} <= set(res)
+
+
+def test_recovery_negative_drift_is_refused():
+    from fabtriage import recovery as R
+
+    job = R.RecoveryJob(R.load("rec_fast_drift-5"))
+    job.call("get_recovery_brief", {})
+    h = job.call("get_chamber_history", {})
+    m = job.call("run_monitor_wafer", {"time_s": 60})
+    e = job.call("estimate_recipe", {"monitor_evidence_ids": [m["evidence_id"]]})
+    slope = next(p["thickness_slope_A_per_lot_first_40"] for p in h["earlier_pms"] if "showerhead" in p["work"])
+    claims = [{"evidence_id": e["evidence_id"], "statement": "Recipe from the monitor."}, {"evidence_id": h["evidence_id"], "statement": "Showerhead history."}]
+    r = job.call("release_chamber", {"time_s": e["recipe_time_s_for_500A"], "drift_A_per_lot": slope, "claims": claims, "summary": "x"})
+    assert not r["accepted"] and any("positive number" in p for p in r["problems"])
+    r = job.call("release_chamber", {"time_s": e["recipe_time_s_for_500A"], "drift_A_per_lot": abs(slope), "claims": claims, "summary": "x"})
+    assert r["accepted"], r

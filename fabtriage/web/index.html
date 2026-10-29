@@ -1075,7 +1075,7 @@ async function loadRecovery() {
   if (!rstate.caseId && rstate.cases.length) selectRec(rstate.cases[0].case_id);
 }
 function renderRecList() {
-  const groups = KO() ? { dev: "개발 세트", holdout: "평가 세트" } : { dev: "Development", holdout: "Held-out" };
+  const groups = KO() ? { dev: "개발 세트", holdout: "평가 세트", holdout2: "새 평가 세트" } : { dev: "Development", holdout: "Held-out", holdout2: "Fresh held-out" };
   let html = "";
   for (const [split, label] of Object.entries(groups)) {
     html += `<div class="group">${label}</div>`;
@@ -1234,7 +1234,7 @@ function recBench(data) {
   if (!rec) return "";
   const cols = [["off_target_lots", L("Off-target lots", "관리 한계 이탈 lot")], ["out_of_spec_lots", L("Out-of-spec lots", "규격 이탈 lot")], ["avg_monitor_wafers", L("Monitor wafers per recovery", "복구당 모니터 웨이퍼")], ["avg_downtime_h", L("Chamber time, h", "장비 정지, 시간")], ["needs_engineer", L("Sent to an engineer", "엔지니어 이관")], ["no_shift_max_change_pct", L("Change when nothing changed, %", "변화 없을 때 레시피 변경, %")]];
   let html = `<h1 style="margin-top:40px">${L("Recovery after PM", "PM 후 복구")}</h1><p class="lead">${L("The same chamber, held after PM, recovered by each method. 40 production lots follow each release and are scored on the true film. Success criteria were written before any agent run (docs/RECOVERY.md).", "PM 뒤 홀드된 같은 챔버를 방법마다 복구합니다. 해제 뒤 40개 생산 lot을 실제 막 두께로 채점합니다. 성공 기준은 에이전트를 돌리기 전에 정했습니다 (docs/RECOVERY.md).")}</p>`;
-  for (const [split, title] of [["holdout", L("Held-out recoveries", "평가 세트")], ["dev", L("Development recoveries", "개발 세트")]]) {
+  for (const [split, title] of [["holdout2", L("Fresh held-out recoveries (after the fix)", "새 평가 세트 (수정 후)")], ["holdout", L("Held-out recoveries", "평가 세트")], ["dev", L("Development recoveries", "개발 세트")]]) {
     const ms = Object.keys(rec[split] || {});
     if (!ms.length) continue;
     html += `<h2>${title}</h2><table class="sum"><tr><th>${L("Method", "방법")}</th>${cols.map((c) => `<th>${c[1]}</th>`).join("")}</tr>`;

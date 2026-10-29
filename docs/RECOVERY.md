@@ -63,3 +63,27 @@ On the held-out recoveries (seeds 5 and 6, run once, agent repeated 3 times):
 5. On `no_shift` cases the agent changes the recipe time by at most 1%.
 
 If a criterion fails, the README says so and shows which scenarios the agent lost.
+
+## What happened (added after the runs)
+
+Development (20 recoveries, one run): 3 off-target lots for the agent against 45 for the
+two-monitor rule and 87 for keeping the recipe. All 3 came from `metrology_bias`, after the
+agent had correctly measured its monitor wafers on MET01: once in production, half the
+measured lots still come from the offset MET02 and pull the EWMA controller thin. No method
+here can fix that from the recipe; it needs the metrology tool fixed or the offset put into the
+controller. Nothing was changed after the development run.
+
+Held-out (10 recoveries, three runs): all five criteria met. Off-target lots 6, 6 and 30
+(mean 14 ± 13.9) against 20 for the best guide rule; no out-of-spec lots; 1.67 monitor
+wafers per recovery; no recipe change when nothing changed.
+
+The one bad run: in `fast_drift-5`, repeat 3, the agent copied the history's thickness slope
+(-0.82 Å per lot) into `drift_A_per_lot`, which expects thinning as a positive number. The
+controller then pushed the film the wrong way and 24 of 40 lots went off target. The other two
+repeats used +0.82 and had none. The verifier accepted it because it only checked that the
+number came from evidence.
+
+The fix is one verifier rule: a negative `drift_A_per_lot` is refused with a message that
+says which sign to use. The tool description now says the same. Because this fix came from
+reading a held-out failure, the fixed version is checked on a fresh held-out set (seeds 7
+and 8) that nobody has looked at.
