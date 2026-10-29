@@ -47,6 +47,10 @@ nav.tabs button {
   border: 0; background: none; padding: 6px 12px; border-radius: 4px; cursor: pointer; color: var(--muted); font-weight: 500;
 }
 nav.tabs button[aria-selected="true"] { background: var(--ink); color: var(--panel); }
+.lang { display: flex; margin-left: 14px; border: 1px solid var(--line); border-radius: 2px; align-self: center; }
+.lang button { border: 0; background: none; padding: 3px 9px; cursor: pointer; color: var(--muted); font: 600 13px var(--head); letter-spacing: .03em; }
+.lang button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+:lang(ko) body { word-break: keep-all; }
 
 /* ---------- three columns ---------- */
 main.console { display: grid; grid-template-columns: 250px minmax(0, 1fr) 360px; height: calc(100vh - 53px - var(--banner, 0px)); }
@@ -252,15 +256,16 @@ table.sum tr.agent td { font-weight: 600; }
 </head>
 <body>
 <header class="top">
-  <div class="brand">FabTriage<small>Alarm investigation, CVD deposition</small></div>
+  <div class="brand">FabTriage<small data-i18n="tagline">Alarm investigation, CVD deposition</small></div>
   <nav class="tabs" role="tablist">
-    <button role="tab" aria-selected="true" data-view="shift">Alarm queue</button>
-    <button role="tab" aria-selected="false" data-view="console">Investigations</button>
-    <button role="tab" aria-selected="false" data-view="bench">Benchmark</button>
+    <button role="tab" aria-selected="true" data-view="shift" data-i18n="tab_shift">Alarm queue</button>
+    <button role="tab" aria-selected="false" data-view="console" data-i18n="tab_console">Investigations</button>
+    <button role="tab" aria-selected="false" data-view="bench" data-i18n="tab_bench">Benchmark</button>
   </nav>
+  <div class="lang" role="group" aria-label="Language"><button data-lang="en" aria-pressed="true">EN</button><button data-lang="ko" aria-pressed="false">KR</button></div>
 </header>
 
-<div id="demobanner" class="demobanner" hidden>Read-only demo built from saved runs. Live investigations, sign-off and voice notes run in the local version: <a href="https://github.com/yhwang55/fabtriage">github.com/yhwang55/fabtriage</a></div>
+<div id="demobanner" class="demobanner" hidden><span data-i18n="banner">Read-only demo built from saved runs. Live investigations, sign-off and voice notes run in the local version:</span> <a href="https://github.com/yhwang55/fabtriage">github.com/yhwang55/fabtriage</a></div>
 <main id="shift" class="shift"></main>
 <main class="console" id="console" hidden>
   <div class="col list" id="list" aria-label="Alarms"></div>
@@ -271,6 +276,59 @@ table.sum tr.agent td { font-weight: 600; }
 
 <script>window.FABTRIAGE_STATIC = true;</script>
 <script>
+let LANG = "en";
+try {
+  const q = new URLSearchParams(location.search).get("lang");
+  LANG = q === "ko" || q === "kr" ? "ko" : q === "en" ? "en" : localStorage.getItem("fabtriage-lang") || "en";
+} catch (e) {}
+const KO = () => LANG === "ko";
+const L = (en, ko) => (KO() ? ko : en);
+const UI = {
+  tagline: ["Alarm investigation, CVD deposition", "CVD 증착 공정 알람 조사"],
+  tab_shift: ["Alarm queue", "알람 대기열"],
+  tab_console: ["Investigations", "조사 기록"],
+  tab_bench: ["Benchmark", "성능 비교"],
+  banner: ["Read-only demo built from saved runs. Live investigations, sign-off and voice notes run in the local version:",
+    "저장된 실행 기록으로 만든 읽기 전용 데모입니다. 실시간 조사, 승인, 음성 메모는 로컬 버전에서 쓸 수 있습니다:"],
+};
+function applyStatic() {
+  document.documentElement.lang = KO() ? "ko" : "en";
+  for (const el of document.querySelectorAll("[data-i18n]")) el.textContent = UI[el.dataset.i18n][KO() ? 1 : 0];
+  for (const b of document.querySelectorAll(".lang button")) b.setAttribute("aria-pressed", b.dataset.lang === LANG);
+}
+const TOOL_NAMES_KO = {
+  get_alarm: "알람 확인", get_lot_history: "lot 이력 추적", query_lots: "최근 lot 조회", get_chamber_summary: "챔버끼리 비교",
+  get_trend: "추세 확인", run_commonality: "공통성 분석", get_fdc_summary: "FDC 센서 확인", get_pm_log: "PM 기록 확인",
+  request_measurement: "재측정 요청", get_wafer_map: "웨이퍼 맵 분할", submit_disposition: "처분안 제출",
+};
+const CAUSES_KO = { chamber: "증착 챔버 이상", metrology: "계측 오측정", upstream: "앞 공정(세정) 문제", noise: "일회성 웨이퍼 편차", sensor: "FDC 센서 고장" };
+const ACTIONS_KO = {
+  hold_lot: "lot 홀드", release_lot: "lot 진행", hold_chamber: "챔버 홀드",
+  escalate_upstream: "앞 공정에 이관", hold_metrology_tool: "계측 장비 홀드", flag_sensor: "센서 점검 요청",
+};
+const METHOD_NAMES_KO = { agent: "에이전트", playbook: "고정 규칙", always_hold: "무조건 홀드", compare: "나란히 비교" };
+const STATUS_TEXT_KO = {
+  awaiting_signoff: "승인 대기", approve: "승인됨", reject: "반려, 재조사 요청",
+  needs_engineer: "엔지니어 확인 필요", turn_limit: "중간에 멈춤", error: "중간에 멈춤", running: "조사 중",
+};
+const BENCH_NAMES_KO = {
+  agent: "에이전트 (Muse Spark 1.3)", agent_baseten: "에이전트 (Muse Spark Open)", agent_noverify: "검증기 없는 에이전트",
+  oneshot: "같은 모델, 도구 없이 한 번에 답변", playbook: "고정 규칙", always_hold: "무조건 홀드",
+};
+const PATTERNS_KO = { none: "두꺼운 영역 없음", center: "중앙이 두꺼움", edge_ring: "가장자리 링", edge_arc: "가장자리 일부", local_spot: "국소 반점", multiple: "두꺼운 영역 여러 곳", most_of_wafer: "웨이퍼 대부분이 두꺼움", wafer_wide: "웨이퍼 전반" };
+const SCENARIO_KO = { pm_shift: "PM 후 변화", buildup_drift: "증착물 누적 드리프트", metrology_error: "계측 오류", upstream_clean: "앞 공정 세정", wafer_noise: "웨이퍼 단발 편차", sensor_fault: "센서 고장", heater_drift: "히터 드리프트" };
+const ASSUME_KO = {
+  engineer_hours_per_manual_investigation: "현직 팹 데이터 사이언티스트에게 들은 바로는 오경보 홀드는 보통 2~3시간이면 풀립니다.",
+  engineer_hours_per_review: "근거가 달린 처분안을 읽고 승인하거나 반려하는 데 약 10분 (우리 추정).",
+  lot_hours_per_needless_hold: "불필요하게 홀드된 lot은 그 홀드를 푸는 조사 시간만큼 기다립니다.",
+  lots_at_risk_per_missed_fault: "시뮬레이터에서는 lot의 절반 정도만 측정하므로, 놓친 챔버 이상은 다음 측정 웨이퍼가 잡기 전까지 lot 두 개쯤 더 흘러갑니다.",
+};
+const toolName = (t) => (KO() ? TOOL_NAMES_KO[t] : TOOL_NAMES[t]) || t;
+const causeName = (c) => (KO() ? CAUSES_KO[c] : CAUSES[c]) || c;
+const actionName = (a) => (KO() ? ACTIONS_KO[a] : ACTIONS[a]) || a;
+const methodName = (m) => (KO() ? METHOD_NAMES_KO[m] : METHOD_NAMES[m]) || m;
+const statusText = (s) => (KO() ? STATUS_TEXT_KO[s] : STATUS_TEXT[s]) || "";
+const benchName = (m) => (KO() ? BENCH_NAMES_KO[m] : BENCH_NAMES[m]) || m;
 const TOOL_NAMES = {
   get_alarm: "Read the alarm",
   get_lot_history: "Traced the lot",
@@ -309,7 +367,7 @@ const state = { cases: [], liveEnabled: false, caseId: null, method: "agent", ru
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const PATTERNS = { none: "no thick region", center: "center-thick", edge_ring: "edge ring", edge_arc: "edge arc", local_spot: "local spot", multiple: "several thick regions", most_of_wafer: "thick over most of the wafer", wafer_wide: "wafer-wide region" };
-const pattern = (p) => PATTERNS[p] || esc(String(p).replace(/_/g, " "));
+const pattern = (p) => (KO() ? PATTERNS_KO[p] : PATTERNS[p]) || esc(String(p).replace(/_/g, " "));
 const fmt = (v, d = 2) => (typeof v === "number" ? v.toFixed(d) : esc(v));
 const STATIC = !!window.FABTRIAGE_STATIC;
 function staticPath(path) {
@@ -322,7 +380,7 @@ function staticPath(path) {
 }
 async function api(path, body) {
   if (STATIC) {
-    if (body) return { error: "This is the read-only demo. Live investigations and sign-off run in the local version (see the README)." };
+    if (body) return { error: L("This is the read-only demo. Live investigations and sign-off run in the local version (see the README).", "읽기 전용 데모입니다. 실시간 조사와 승인은 로컬 버전에서 쓸 수 있습니다 (README 참고).") };
     const r = await fetch(staticPath(path));
     if (!r.ok) return path.startsWith("/api/run") ? { run: null, live: false } : {};
     return r.json();
@@ -349,11 +407,33 @@ const GLOSSARY = {
   Hold: "Stop the lot or the chamber until an engineer clears it. Safe, but it costs production time.",
   Release: "Let the lot continue. Right when the film is fine; costly if it is not.",
 };
-const term = (word, label = word, cls = "") => `<span class="term ${cls}" tabindex="0" data-tip="${esc(GLOSSARY[word] || "")}">${label}</span>`;
+const GLOSSARY_KO = {
+  OOS: "규격 이탈(Out of spec): 제품이 지켜야 하는 한계(여기서는 485~515 Å)를 벗어난 값입니다. 이대로는 출하할 수 없습니다.",
+  OOC: "관리 이탈(Out of control): 규격 안이지만 통계적 관리 한계(493~507 Å)를 벗어난 값입니다. 공정이 변하는 중일 수도, 우연일 수도 있습니다.",
+  FDC: "설비 이상 감지(Fault detection and classification): 장비가 돌 때마다 기록하는 센서 값입니다. 히터 온도, RF 파워, 압력, 가스 유량 등.",
+  PM: "예방 정비(Preventive maintenance): 정해진 주기로 하는 세정과 부품 교체입니다. PM 뒤에 챔버 특성이 달라지기도 합니다.",
+  "Å": "옹스트롬. 0.1 nm입니다. 여기서 막 두께는 약 500 Å입니다.",
+  Lot: "함께 이동하는 웨이퍼 25장 묶음입니다. 보통 그중 한 장만 측정합니다.",
+  Chamber: "증착 장비 안의 공정 챔버 하나입니다. DEP01-A와 DEP01-B는 DEP01 장비의 두 챔버입니다.",
+  Metrology: "웨이퍼 측정입니다. 여기에는 MET01, MET02 두 대가 있고, 측정 장비도 잘못 읽을 수 있습니다.",
+  "Commonality analysis": "공통성 분석: 어떤 공정 단계에서 특정 장비를 거친 lot만 값이 다른지 보는 통계 검사(일원 분산분석)입니다. p값이 작으면 그 장비가 의심됩니다.",
+  Verifier: "검증기: 엔지니어가 보기 전에 모든 처분안을 확인하는 일반 코드입니다. 주장마다 실제 증거를 인용해야 하고, 숫자는 증거와 맞아야 하며, 플레이북 안전 규칙을 지켜야 합니다.",
+  "Evidence id": "증거 번호: 도구 결과마다 번호(E1, E2, ...)가 붙고, 주장은 이 번호를 인용해야 합니다. 누르면 그 결과를 낸 단계로 이동합니다.",
+  Hold: "홀드: 엔지니어가 풀어 줄 때까지 lot이나 챔버를 멈춥니다. 안전하지만 생산 시간을 잃습니다.",
+  Release: "진행: lot을 다음 공정으로 보냅니다. 막이 정상이면 맞는 결정이고, 아니면 비용이 큽니다.",
+};
+const gloss = (word) => (KO() ? GLOSSARY_KO[word] : GLOSSARY[word]) || "";
+const term = (word, label = word, cls = "") => `<span class="term ${cls}" tabindex="0" data-tip="${esc(gloss(word))}">${label}</span>`;
 function guideHtml() {
   let seen = false;
   try { seen = localStorage.getItem("fabtriage-guide") === "closed"; } catch (e) {}
   if (seen) return "";
+  if (KO()) return `<div class="guide" id="guide">
+    <h2>이 화면 읽는 법</h2>
+      <p>한 줄이 가상 반도체 팹에서 울린 알람 하나입니다. 막이 너무 두껍게 나왔거나 센서가 이상한 값을 보냈습니다. 웨이퍼와 장비를 멈출지(홀드), 그냥 보낼지(진행) 정해야 합니다.</p>
+      <p>AI 에이전트가 엔지니어처럼 알람을 하나씩 조사하고 결정을 제안했습니다. 줄을 누르면 맨 위에 결론, 그 아래에 근거와 조사 단계가 나옵니다. 밑줄 친 용어에 마우스를 올리면 설명이 뜹니다. 에이전트가 쓴 문장은 검증을 거친 영어 원문 그대로 둡니다.</p>
+      <p><b>나란히 비교</b>로 고정 규칙과 비교하고, <b>조사 다시 보기</b>로 과정을 재생하고, <b>실제 원인 보기</b>로 숨겨진 정답을 확인할 수 있습니다.</p>
+    <button class="close" id="guideclose">알겠어요, 숨기기</button></div>`;
   return `<div class="guide" id="guide">
     <h2>How to read this</h2>
       <p>Each row is an alarm from a simulated chip fab: a film came out too thick, or a sensor reported something odd. Something has to be decided: hold the wafers and the machine, or let them go.</p>
@@ -362,7 +442,7 @@ function guideHtml() {
     <button class="close" id="guideclose">Got it, hide this</button></div>`;
 }
 function glossaryHtml() {
-  return `<dl class="glossary">${Object.entries(GLOSSARY).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>`;
+  return `<dl class="glossary">${Object.entries(KO() ? GLOSSARY_KO : GLOSSARY).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${esc(v)}</dd>`).join("")}</dl>`;
 }
 
 /* ---------------- list ---------------- */
@@ -374,7 +454,7 @@ async function loadCases() {
   if (!$("#shift").hidden) renderShift();
 }
 function renderList() {
-  const groups = { dev: "Development alarms", holdout: "Held-out alarms", holdout2: "Fresh held-out alarms" };
+  const groups = KO() ? { dev: "개발 세트 알람", holdout: "평가 세트 알람", holdout2: "새 평가 세트 알람" } : { dev: "Development alarms", holdout: "Held-out alarms", holdout2: "Fresh held-out alarms" };
   let html = "";
   for (const [split, label] of Object.entries(groups)) {
     html += `<div class="group">${label}</div>`;
@@ -385,7 +465,7 @@ function renderList() {
       html += `<button class="alarm-row" data-case="${c.case_id}" aria-current="${c.case_id === state.caseId}">
         ${term(a.type, a.type, "kind " + a.type)}
         <span class="what"><b>${esc(a.chamber)}</b><span>${esc(a.alarm_id)}, ${val}</span></span>
-        <span class="dot ${dot}" title="${run ? esc(dot.replace("_", " ")) : "not investigated"}"></span>
+        <span class="dot ${dot}" title="${run ? esc(statusText(dot) || dot.replace("_", " ")) : L("not investigated", "조사 안 함")}"></span>
       </button>`;
     }
   }
@@ -433,13 +513,14 @@ function gauge(value, L, type) {
     <line x1="${x(L.target)}" x2="${x(L.target)}" y1="10" y2="24" stroke="var(--muted)"/>
     <text x="${x(L.lsl)}" y="34" text-anchor="middle">LSL ${L.lsl}</text>
     <text x="${x(L.usl)}" y="34" text-anchor="middle">USL ${L.usl}</text>
-    <text x="${x(L.target)}" y="8" text-anchor="middle">target</text>
+    <text x="${x(L.target)}" y="8" text-anchor="middle">${KO() ? "목표" : "target"}</text>
     <path d="M${x(value) - 6},4 L${x(value) + 6},4 L${x(value)},12 Z" fill="var(--ink)"/>
     <line x1="${x(value)}" x2="${x(value)}" y1="12" y2="22" stroke="var(--ink)" stroke-width="2"/>
   </svg>`;
 }
 
 function finding(s) {
+  if (KO()) return findingKo(s);
   const r = s.result || {}, a = s.args || {};
   if (r.error) return `<span class="soft">Refused: ${esc(r.error)}</span>`;
   switch (s.tool) {
@@ -473,32 +554,68 @@ function finding(s) {
   }
 }
 
+function findingKo(s) {
+  const r = s.result || {}, a = s.args || {};
+  if (r.error) return `<span class="soft">거부됨: ${esc(r.error)}</span>`;
+  switch (s.tool) {
+    case "get_alarm": return `${esc(r.alarm.chamber)}에서 ${esc(r.alarm.type)}, ${esc(r.alarm.met_tool || r.alarm.parameter)} 측정값 ${fmt(r.alarm.value)}.`;
+    case "get_lot_history": return `${esc(r.lot_id)} 경로: ${esc(r.clean_tool)} → ${esc(r.chamber)}${r.met_tool ? " → " + esc(r.met_tool) : ""}. 그 챔버는 PM 이후 웨이퍼 ${r.wafers_since_pm_on_chamber}장 처리.`;
+    case "query_lots": return `최근 ${a.window_hours || 12}시간${a.chamber ? ", " + esc(a.chamber) : ""}${a.clean_tool ? ", " + esc(a.clean_tool) + " 세정" : ""}${a.met_tool ? ", " + esc(a.met_tool) + " 측정" : ""} lot ${r.n}개.`;
+    case "get_chamber_summary": {
+      const rows = Object.entries(r.chambers).map(([c, v]) =>
+        `<tr><td>${esc(c)}</td><td class="${v.mean_A > 507 ? "hi" : ""}">${v.mean_A !== undefined ? fmt(v.mean_A) : "데이터 없음"}</td><td>OOC ${v.n_ooc ?? 0}건</td><td>PM 후 ${esc(v.hours_since_last_pm)}시간</td></tr>`).join("");
+      return `<table class="mini"><tr><th>챔버</th><th>평균, Å</th><th></th><th></th></tr>${rows}</table>`;
+    }
+    case "get_trend": {
+      let t = `${esc(r.chamber)}의 ${esc(r.signal)}: ${r.n_points}개 점, 마지막 값 ${fmt(r.last_value)}.`;
+      if (r.mean_before_pm != null && r.mean_after_pm != null) t += ` PM 전 평균 ${fmt(r.mean_before_pm)}, 후 ${fmt(r.mean_after_pm)}.`;
+      return t;
+    }
+    case "run_commonality": {
+      const rows = Object.entries(r.steps).map(([st, v]) =>
+        `<tr><td>${st}</td><td class="${v.anova_p_value !== null && v.anova_p_value < 0.01 ? "hi" : ""}">p = ${v.anova_p_value ?? "n/a"}</td><td>가장 벗어난 장비: ${esc(v.most_deviant_tool)}</td></tr>`).join("");
+      return `<table class="mini">${rows}</table>`;
+    }
+    case "get_fdc_summary": {
+      const off = Object.entries(r.parameters).filter(([, v]) => Math.abs(v.z_score) >= 3);
+      const p = off.length ? off.map(([k, v]) => `${esc(k)} ${v.delta > 0 ? "+" : ""}${v.delta} (z ${v.z_score})`).join(", ") : "모든 센서가 기준선 근처";
+      return `${esc(r.chamber)}, 최근 ${r.recent_hours}시간: ${p}. 이 기간 측정 웨이퍼 ${r.recent_measured_wafers.length}장.`;
+    }
+    case "get_pm_log": return `PM ${r.events.length}건${a.chamber ? " (" + esc(a.chamber) + ")" : ""}, 마지막은 ${r.events.length ? r.events[r.events.length - 1].time_h + "시간" : "없음"}.`;
+    case "request_measurement": return `${esc(r.lot_id)}을 ${esc(r.met_tool)}에서 측정: <b>${fmt(r.mean_A)} Å</b>, ${r.in_spec ? "규격 안" : "규격 밖"}. lot 지연 ${r.lot_delay_added_h}시간 추가.`;
+    case "get_wafer_map": return `${esc(r.lot_id)}: ${pattern(r.pattern)}, ${esc(r.segmenter)}로 분할.`;
+    default: return "";
+  }
+}
+
 function alarmHeader(c, live, run) {
-  const a = c.alarm, L = state.ctx.limits;
+  const a = c.alarm, L_ = state.ctx.limits;
   const reading = a.type === "FDC" ? `${fmt(a.value, 1)}<small>°C</small>` : `${fmt(a.value)}<small>Å</small>`;
-  const methodBtns = Object.entries(METHOD_NAMES).map(([m, n]) => `<button aria-pressed="${m === state.method}" data-m="${m}">${n}</button>`).join("");
+  const methodBtns = Object.keys(METHOD_NAMES).map((m) => `<button aria-pressed="${m === state.method}" data-m="${m}">${methodName(m)}</button>`).join("");
   const heldOut = c.split !== "dev";
   const canRun = state.method === "agent" && state.liveEnabled && !live && !heldOut;
   return `<div class="alarm-head">
       <div><h1>${esc(a.chamber)}, ${esc(a.lot_id)}</h1>
-      <div class="sub">${term(a.type)} ${a.type === "FDC" ? "alarm, " + esc(a.parameter) : esc(a.rule)}. Raised at ${a.time_h} h by ${esc(a.alarm_id)}.</div></div>
+      <div class="sub">${KO()
+        ? `${term(a.type)} ${a.type === "FDC" ? "알람, " + esc(a.parameter) + " 3시그마 초과" : a.type === "OOS" ? `웨이퍼 평균이 규격 ${L_.lsl}~${L_.usl} 밖` : `웨이퍼 평균이 관리 한계 ${L_.lcl}~${L_.ucl} 밖`}. ${a.time_h}시간에 ${esc(a.alarm_id)} 발생.`
+        : `${term(a.type)} ${a.type === "FDC" ? "alarm, " + esc(a.parameter) : esc(a.rule)}. Raised at ${a.time_h} h by ${esc(a.alarm_id)}.`}</div></div>
       <div class="reading"><div class="num">${reading}</div></div>
-      ${gauge(a.value, L, a.type)}
+      ${gauge(a.value, L_, a.type)}
     </div>
     <div class="methods"><div class="seg" role="group" aria-label="Who investigated">${methodBtns}</div>
-      ${run && state.method !== "compare" ? `<button class="btn ghost" id="replay">${state.replay != null ? "Stop replay" : "Replay the investigation"}</button>` : ""}
-      ${state.method === "agent" && !STATIC ? `<button class="btn ghost" id="runlive" ${canRun ? "" : "disabled"}>${heldOut ? "Held out for the final benchmark" : live ? "Investigating…" : run ? "Investigate again" : "Investigate live"}</button>` : ""}
-      ${state.method === "agent" && !STATIC && !state.liveEnabled ? `<span class="note">Add MODEL_API_KEY to .env to run live.</span>` : ""}
+      ${run && state.method !== "compare" ? `<button class="btn ghost" id="replay">${state.replay != null ? L("Stop replay", "재생 멈추기") : L("Replay the investigation", "조사 다시 보기")}</button>` : ""}
+      ${state.method === "agent" && !STATIC ? `<button class="btn ghost" id="runlive" ${canRun ? "" : "disabled"}>${heldOut ? L("Held out for the final benchmark", "최종 평가용으로 남겨 둔 알람") : live ? L("Investigating…", "조사 중…") : run ? L("Investigate again", "다시 조사") : L("Investigate live", "실시간 조사")}</button>` : ""}
+      ${state.method === "agent" && !STATIC && !state.liveEnabled ? `<span class="note">${L("Add MODEL_API_KEY to .env to run live.", "실시간 조사를 하려면 .env에 MODEL_API_KEY를 넣으세요.")}</span>` : ""}
     </div>`;
 }
 
 function renderTraveler(live) {
   const c = state.cases.find((x) => x.case_id === state.caseId);
-  if (!c) { $("#traveler").innerHTML = `<p class="empty">Pick an alarm on the left to see how it was investigated.</p>`; return; }
+  if (!c) { $("#traveler").innerHTML = `<p class="empty">${L("Pick an alarm on the left to see how it was investigated.", "왼쪽에서 알람을 고르면 조사 과정을 볼 수 있습니다.")}</p>`; return; }
   const run = state.run;
   let html = alarmHeader(c, live, run);
   if (!run) {
-    html += `<p class="empty">${live ? "Starting the investigation…" : `No ${METHOD_NAMES[state.method].toLowerCase()} run for this alarm yet.`}</p>`;
+    html += `<p class="empty">${live ? L("Starting the investigation…", "조사를 시작하는 중…") : L(`No ${METHOD_NAMES[state.method].toLowerCase()} run for this alarm yet.`, `이 알람에는 아직 ${methodName(state.method)} 실행 기록이 없습니다.`)}</p>`;
     $("#traveler").innerHTML = html;
     bindTraveler();
     return;
@@ -510,9 +627,9 @@ function renderTraveler(live) {
   const replaying = state.replay != null && state.replay < run.trace.length;
   const shown = replaying ? run.trace.slice(0, state.replay) : run.trace;
   html += replaying
-    ? `<section class="verdict pending" aria-live="polite"><div class="vhead"><span class="vlabel">Replaying</span><h2>Step ${state.replay} of ${run.trace.length}</h2></div><p class="summary">The verdict appears when the verifier accepts it.</p></section>`
+    ? `<section class="verdict pending" aria-live="polite"><div class="vhead"><span class="vlabel">${L("Replaying", "재생 중")}</span><h2>${L(`Step ${state.replay} of ${run.trace.length}`, `${run.trace.length}단계 중 ${state.replay}단계`)}</h2></div><p class="summary">${L("The verdict appears when the verifier accepts it.", "검증기가 받아들이면 결론이 나타납니다.")}</p></section>`
     : verdictCard(run, evStep, !live, live);
-  html += `<h3 class="routehead">How it got there</h3><ol class="route">`;
+  html += `<h3 class="routehead">${L("How it got there", "결론까지의 과정")}</h3><ol class="route">`;
   shown.forEach((s, i) => {
     const n = i + 1, r = s.result || {};
     if (r.evidence_id) evStep[r.evidence_id] = n;
@@ -520,48 +637,59 @@ function renderTraveler(live) {
     if (s.tool === "submit_disposition") {
       if (r.accepted) {
         html += `<li class="step final" id="step-${n}"><span class="n">${n}</span><div class="body">${thought}
-          <div class="title"><b>Filed a disposition</b><span class="soft">passed the verifier</span></div>
-          <div class="finding"><button class="linkbtn" data-top="1">See the verdict at the top</button></div></div></li>`;
+          <div class="title"><b>${L("Filed a disposition", "처분안 제출")}</b><span class="soft">${L("passed the verifier", "검증 통과")}</span></div>
+          <div class="finding"><button class="linkbtn" data-top="1">${L("See the verdict at the top", "맨 위 결론 보기")}</button></div></div></li>`;
       } else {
         const probs = (r.problems || []).map((p) => `<li>${esc(p.replace(/^rule: /, ""))}</li>`).join("");
         html += `<li class="step refused" id="step-${n}"><span class="n">${n}</span><div class="body">${thought}
-          <div class="title"><b>${term("Verifier")} refused the disposition</b></div><ul>${probs}</ul>
-          <details class="raw"><summary>What the agent tried to file</summary><pre>${esc(JSON.stringify(s.args, null, 1))}</pre></details></div></li>`;
+          <div class="title"><b>${KO() ? `${term("Verifier", "검증기")}가 처분안을 거부함` : `${term("Verifier")} refused the disposition`}</b></div><ul>${probs}</ul>
+          <details class="raw"><summary>${L("What the agent tried to file", "에이전트가 제출하려던 내용")}</summary><pre>${esc(JSON.stringify(s.args, null, 1))}</pre></details></div></li>`;
       }
       return;
     }
-    let label = s.tool === "get_trend" ? `Pulled ${esc(s.args.signal)} on ${esc(s.args.chamber)}` : TOOL_NAMES[s.tool] || s.tool;
-    if (s.tool === "run_commonality") label = `Ran ${term("Commonality analysis", "commonality analysis")}`;
-    if (s.tool === "get_pm_log") label = `Read the ${term("PM")} log`;
-    if (s.tool === "get_fdc_summary") label = `Checked ${term("FDC")} sensors`;
-    if (s.tool === "request_measurement") label = `Requested a ${term("Metrology", "measurement")}`;
+    let label = trendLabel(s);
+    if (KO()) {
+      if (s.tool === "run_commonality") label = `${term("Commonality analysis", "공통성 분석")} 실행`;
+      if (s.tool === "get_pm_log") label = `${term("PM")} 기록 확인`;
+      if (s.tool === "get_fdc_summary") label = `${term("FDC")} 센서 확인`;
+      if (s.tool === "request_measurement") label = `${term("Metrology", "재측정")} 요청`;
+    } else {
+      if (s.tool === "run_commonality") label = `Ran ${term("Commonality analysis", "commonality analysis")}`;
+      if (s.tool === "get_pm_log") label = `Read the ${term("PM")} log`;
+      if (s.tool === "get_fdc_summary") label = `Checked ${term("FDC")} sensors`;
+      if (s.tool === "request_measurement") label = `Requested a ${term("Metrology", "measurement")}`;
+    }
     html += `<li class="step" id="step-${n}"><span class="n">${n}</span><div class="body">${thought}
-      <div class="title"><b>${label}</b>${r.evidence_id ? `<span class="chip" data-step="${n}" title="${esc(GLOSSARY["Evidence id"])}">${r.evidence_id}</span>` : ""}</div>
+      <div class="title"><b>${label}</b>${r.evidence_id ? `<span class="chip" data-step="${n}" title="${esc(gloss("Evidence id"))}">${r.evidence_id}</span>` : ""}</div>
       <div class="finding">${finding(s)}</div>
-      <details class="raw"><summary>Raw result</summary><pre>${esc(JSON.stringify(r, null, 1))}</pre></details></div></li>`;
+      <details class="raw"><summary>${L("Raw result", "원본 결과")}</summary><pre>${esc(JSON.stringify(r, null, 1))}</pre></details></div></li>`;
   });
   html += `</ol>`;
-  if (live) html += `<p class="empty">Investigating…</p>`;
+  if (live) html += `<p class="empty">${L("Investigating…", "조사 중…")}</p>`;
   if ((run.history || []).length) {
-    html += `<div class="history">Earlier dispositions for this alarm: ${run.history.map((h) =>
-      `${esc(CAUSES[h.disposition.cause] || h.disposition.cause)}${h.signoff ? ", " + esc(h.signoff.decision) + "d" + (h.signoff.note ? ` ("${esc(h.signoff.note)}")` : "") : ""}`).join("; ")}.</div>`;
+    html += `<div class="history">${L("Earlier dispositions for this alarm", "이 알람의 이전 처분안")}: ${run.history.map((h) =>
+      `${esc(causeName(h.disposition.cause))}${h.signoff ? ", " + esc(KO() ? (h.signoff.decision === "approve" ? "승인" : "반려") : h.signoff.decision + "d") + (h.signoff.note ? ` ("${esc(h.signoff.note)}")` : "") : ""}`).join("; ")}.</div>`;
   }
   $("#traveler").innerHTML = html;
   bindTraveler();
 }
 
 function decisionText(run) {
-  if (!run || !run.disposition) return "no decision";
-  return run.disposition.actions.map((x) => `${(ACTIONS[x.type] || x.type).toLowerCase()} ${x.target}`).join(", ");
+  if (!run || !run.disposition) return L("no decision", "결정 없음");
+  return run.disposition.actions.map((x) => `${KO() ? actionName(x.type) : (ACTIONS[x.type] || x.type).toLowerCase()} ${x.target}`).join(", ");
 }
 function miniRoute(run) {
   if (!run) return "";
   return `<ol class="mini-route">${run.trace.map((s, i) => {
     const r = s.result || {};
-    if (s.tool === "submit_disposition") return `<li class="${r.accepted ? "" : "refused"}"><b>${i + 1}. ${r.accepted ? "Filed the disposition" : "Verifier refused the disposition"}</b></li>`;
-    const label = s.tool === "get_trend" ? `Pulled ${esc(s.args.signal)} on ${esc(s.args.chamber)}` : TOOL_NAMES[s.tool] || s.tool;
+    if (s.tool === "submit_disposition") return `<li class="${r.accepted ? "" : "refused"}"><b>${i + 1}. ${r.accepted ? L("Filed the disposition", "처분안 제출") : L("Verifier refused the disposition", "검증기가 처분안을 거부함")}</b></li>`;
+    const label = trendLabel(s);
     return `<li><b>${i + 1}. ${label}.</b> ${finding(s)}</li>`;
   }).join("")}</ol>`;
+}
+function trendLabel(s) {
+  if (s.tool === "get_trend") return KO() ? `${esc(s.args.chamber)}의 ${esc(s.args.signal)} 추세 확인` : `Pulled ${esc(s.args.signal)} on ${esc(s.args.chamber)}`;
+  return toolName(s.tool);
 }
 function renderCompare() {
   const c = state.cases.find((x) => x.case_id === state.caseId);
@@ -571,11 +699,12 @@ function renderCompare() {
   if (A && P) {
     const same = key(A) === key(P);
     html += `<div class="diffline ${same ? "same" : ""}">${same
-      ? "Both reached the same decision."
-      : `<b>Different decisions.</b> The agent would ${esc(decisionText(A))}. The fixed playbook would ${esc(decisionText(P))}.`}</div>`;
+      ? L("Both reached the same decision.", "둘 다 같은 결정을 내렸습니다.")
+      : L(`<b>Different decisions.</b> The agent would ${esc(decisionText(A))}. The fixed playbook would ${esc(decisionText(P))}.`,
+          `<b>결정이 다릅니다.</b> 에이전트: ${esc(decisionText(A))}. 고정 규칙: ${esc(decisionText(P))}.`)}</div>`;
   }
-  const col = (title, run, note) => `<div><h3>${title}</h3>${run ? verdictCard(run, {}, false, false) + `<div class="routehead" style="margin-top:12px;font-size:15px">${note}</div>` + miniRoute(run) : `<p class="empty">No run yet.</p>`}</div>`;
-  html += `<div class="pair">${col("Agent", A, "What it looked at, in the order it chose")}${col("Fixed playbook", P, "The same checks every time, then fixed thresholds")}</div>`;
+  const col = (title, run, note) => `<div><h3>${title}</h3>${run ? verdictCard(run, {}, false, false) + `<div class="routehead" style="margin-top:12px;font-size:15px">${note}</div>` + miniRoute(run) : `<p class="empty">${L("No run yet.", "아직 실행 기록이 없습니다.")}</p>`}</div>`;
+  html += `<div class="pair">${col(methodName("agent"), A, L("What it looked at, in the order it chose", "에이전트가 스스로 정한 순서대로 본 것"))}${col(methodName("playbook"), P, L("The same checks every time, then fixed thresholds", "매번 같은 확인, 그다음 고정 기준값"))}</div>`;
   $("#traveler").innerHTML = html;
   bindTraveler();
 }
@@ -598,12 +727,14 @@ function renderShift() {
   const done = n((r) => r && r.signoff === "approve");
   const holds = n((r) => r && (r.actions || []).some((x) => x.startsWith("hold")) && !r.signoff);
   const rows = cs.slice().sort((x, y) => queueRank(x.runs.agent) - queueRank(y.runs.agent));
-  let html = guideHtml() + `<h1>Alarm queue</h1>
+  let html = guideHtml() + (KO() ? `<h1>알람 대기열</h1>
+    <p class="lead">여기 있는 알람은 모두 에이전트가 조사했습니다. 위에서부터 보면 됩니다. 사람이 봐야 하는 알람, 홀드 제안, 진행 제안 순서입니다. 알람마다 가상 팹 이력이 따로 있습니다.</p>
+    <p class="counts">승인 대기 <b>${waiting}</b>건, 그중 홀드 제안 <b>${holds}</b>건. 엔지니어 확인 필요 <b>${attn}</b>건, 승인 완료 <b>${done}</b>건.</p>` : `<h1>Alarm queue</h1>
     <p class="lead">Every alarm here was investigated by the agent. Start at the top: alarms that need you come first, then proposed holds, then proposed releases. Each alarm is its own simulated fab history.</p>
-    <p class="counts"><b>${waiting}</b> waiting for your sign-off, <b>${holds}</b> of them proposing a hold. <b>${attn}</b> need an engineer, <b>${done}</b> approved.</p>
-    <div class="filters"><label for="qsplit">Alarm set</label>
-      <select id="qsplit">${[["dev", "Development"], ["holdout", "Held-out"], ["holdout2", "Fresh held-out"], ["all", "All"]].map(([v, t]) => `<option value="${v}" ${v === split ? "selected" : ""}>${t}</option>`).join("")}</select></div>
-    <table class="queue"><tr><th>Alarm</th><th>${term("Chamber")}</th><th>Reading, ${term("Å")}</th><th>Agent's call</th><th class="opt">Proposed actions</th><th>Status</th></tr>`;
+    <p class="counts"><b>${waiting}</b> waiting for your sign-off, <b>${holds}</b> of them proposing a hold. <b>${attn}</b> need an engineer, <b>${done}</b> approved.</p>`) + `
+    <div class="filters"><label for="qsplit">${L("Alarm set", "알람 세트")}</label>
+      <select id="qsplit">${(KO() ? [["dev", "개발 세트"], ["holdout", "평가 세트"], ["holdout2", "새 평가 세트"], ["all", "전체"]] : [["dev", "Development"], ["holdout", "Held-out"], ["holdout2", "Fresh held-out"], ["all", "All"]]).map(([v, t]) => `<option value="${v}" ${v === split ? "selected" : ""}>${t}</option>`).join("")}</select></div>
+    <table class="queue"><tr><th>${L("Alarm", "알람")}</th><th>${term("Chamber", L("Chamber", "챔버"))}</th><th>${L("Reading", "측정값")}, ${term("Å")}</th><th>${L("Agent's call", "에이전트 판단")}</th><th class="opt">${L("Proposed actions", "제안 조치")}</th><th>${L("Status", "상태")}</th></tr>`;
   for (const c of rows) {
     const a = c.alarm, r = c.runs.agent;
     const st = r ? (r.live ? "running" : r.signoff || r.status) : "";
@@ -611,11 +742,11 @@ function renderShift() {
     html += `<tr class="row" data-case="${c.case_id}" tabindex="0">
       <td><span style="display:inline-block;width:38px">${term(a.type, a.type, "kind " + a.type)}</span> <span class="soft">${esc(a.alarm_id)}</span></td>
       <td>${esc(a.chamber)}</td><td>${val}</td>
-      <td>${r && r.cause ? esc(CAUSES[r.cause] || r.cause) : `<span class="soft">not investigated</span>`}</td>
-      <td class="opt">${r ? (r.actions || []).map((x) => `<span class="act ${x}">${ACTIONS[x] || x}</span>`).join(", ") : ""}</td>
-      <td><span class="status ${st}">${STATUS_TEXT[st] || ""}</span></td></tr>`;
+      <td>${r && r.cause ? esc(causeName(r.cause)) : `<span class="soft">${L("not investigated", "조사 안 함")}</span>`}</td>
+      <td class="opt">${r ? (r.actions || []).map((x) => `<span class="act ${x}">${actionName(x)}</span>`).join(", ") : ""}</td>
+      <td><span class="status ${st}">${statusText(st)}</span></td></tr>`;
   }
-  html += `</table><details style="margin-top:18px"><summary>Glossary</summary>${glossaryHtml()}</details>`;
+  html += `</table><details style="margin-top:18px"><summary>${L("Glossary", "용어 설명")}</summary>${glossaryHtml()}</details>`;
   $("#shift").innerHTML = html;
   const gc = $("#guideclose");
   if (gc) gc.onclick = () => { try { localStorage.setItem("fabtriage-guide", "closed"); } catch (e) {} $("#guide").remove(); };
@@ -631,55 +762,59 @@ function verdictCard(run, evStep, withSignoff, live) {
   if (!run) return "";
   const c = run.costs || {}, d = run.disposition;
   if (live && run.status === "running") {
-    return `<section class="verdict pending" aria-live="polite"><div class="vhead"><span class="vlabel">Investigating</span><h2>${run.trace.length} steps so far</h2></div>
-      <p class="summary">The verdict will appear here once the verifier accepts it.</p></section>`;
+    return `<section class="verdict pending" aria-live="polite"><div class="vhead"><span class="vlabel">${L("Investigating", "조사 중")}</span><h2>${L(`${run.trace.length} steps so far`, `지금까지 ${run.trace.length}단계`)}</h2></div>
+      <p class="summary">${L("The verdict will appear here once the verifier accepts it.", "검증기가 받아들이면 여기에 결론이 나타납니다.")}</p></section>`;
   }
   if (run.status === "needs_engineer") {
     const last = (run.refusals || []).slice(-1)[0];
-    return `<section class="verdict pending"><div class="vhead"><span class="vlabel">Needs an engineer</span><h2>The verifier refused three times</h2></div>
-      <p class="summary">The agent could not back its conclusion with the evidence the playbook requires.</p>
+    return `<section class="verdict pending"><div class="vhead"><span class="vlabel">${L("Needs an engineer", "엔지니어 확인 필요")}</span><h2>${L("The verifier refused three times", "검증기가 세 번 거부했습니다")}</h2></div>
+      <p class="summary">${L("The agent could not back its conclusion with the evidence the playbook requires.", "에이전트가 플레이북이 요구하는 증거로 결론을 뒷받침하지 못했습니다.")}</p>
       ${last ? `<ul class="claims">${last.problems.map((p) => `<li><span></span><span>${esc(p.replace(/^rule: /, ""))}</span></li>`).join("")}</ul>` : ""}</section>`;
   }
   if (!d || run.status !== "awaiting_signoff") {
-    return `<section class="verdict pending"><div class="vhead"><span class="vlabel">No verdict</span><h2>Stopped before filing</h2></div>
+    return `<section class="verdict pending"><div class="vhead"><span class="vlabel">${L("No verdict", "결론 없음")}</span><h2>${L("Stopped before filing", "제출 전에 멈춤")}</h2></div>
       <p class="summary">${esc((run.status || "").replace("_", " "))}${run.error ? ": " + esc(run.error) : ""}</p></section>`;
   }
   const holds = d.actions.some((x) => x.type === "hold_lot" || x.type === "hold_chamber");
-  const acts = d.actions.map((x) => `<span class="act ${esc(x.type)}">${ACTIONS[x.type] || esc(x.type)} ${esc(x.target)}</span>`).join(". ") + ".";
+  const acts = d.actions.map((x) => `<span class="act ${esc(x.type)}">${esc(actionName(x.type))} ${esc(x.target)}</span>`).join(". ") + ".";
   const claim = (cl) => `<li><span><span class="chip" data-step="${evStep[cl.evidence_id] || ""}">${esc(cl.evidence_id)}</span></span><span>${esc(cl.statement)}</span></li>`;
   const top = d.claims.slice(0, 3).map(claim).join(""), rest = d.claims.slice(3).map(claim).join("");
   const tries = c.disposition_tries || 1;
-  const verifier = tries > 1 ? `The ${term("Verifier", "verifier")} sent it back ${tries - 1} time${tries > 2 ? "s" : ""} before accepting it.` : `The ${term("Verifier", "verifier")} accepted it on the first try.`;
+  const verifier = KO()
+    ? (tries > 1 ? `${term("Verifier", "검증기")}가 ${tries - 1}번 돌려보낸 뒤 받아들였습니다.` : `${term("Verifier", "검증기")}가 첫 제출에 받아들였습니다.`)
+    : (tries > 1 ? `The ${term("Verifier", "verifier")} sent it back ${tries - 1} time${tries > 2 ? "s" : ""} before accepting it.` : `The ${term("Verifier", "verifier")} accepted it on the first try.`);
   return `<section class="verdict ${holds ? "stop" : "go"}">
-    <div class="vhead">${term(holds ? "Hold" : "Release", holds ? "Hold" : "Release", "vlabel")}<h2>${esc(CAUSES[d.cause] || d.cause)}</h2></div>
+    <div class="vhead">${term(holds ? "Hold" : "Release", holds ? L("Hold", "홀드") : L("Release", "진행"), "vlabel")}<h2>${esc(causeName(d.cause))}</h2></div>
     <div class="actions">${acts}</div>
     <p class="summary">${esc(d.summary)}</p>
     <ul class="claims">${top}</ul>
-    ${rest ? `<details><summary>All ${d.claims.length} reasons</summary><ul class="claims">${rest}</ul></details>` : ""}
-    <div class="vmeta">${c.tool_calls} tool calls, ${c.measurements} extra measurement${c.measurements === 1 ? "" : "s"} (${c.lot_delay_h} h of lot delay). ${verifier}</div>
+    ${rest ? `<details><summary>${L(`All ${d.claims.length} reasons`, `근거 ${d.claims.length}개 모두 보기`)}</summary><ul class="claims">${rest}</ul></details>` : ""}
+    <div class="vmeta">${KO()
+      ? `도구 호출 ${c.tool_calls}번, 추가 측정 ${c.measurements}번 (lot 지연 ${c.lot_delay_h}시간). ${verifier} 요약과 근거는 에이전트가 쓴 영어 원문입니다.`
+      : `${c.tool_calls} tool calls, ${c.measurements} extra measurement${c.measurements === 1 ? "" : "s"} (${c.lot_delay_h} h of lot delay). ${verifier}`}</div>
     ${withSignoff ? signoffBlock(run) : ""}
   </section>`;
 }
 
 function disposition(d, evStep) {
-  const acts = d.actions.map((x) => `<span class="act ${esc(x.type)}">${ACTIONS[x.type] || esc(x.type)} ${esc(x.target)}</span>`).join(". ") + ".";
+  const acts = d.actions.map((x) => `<span class="act ${esc(x.type)}">${esc(actionName(x.type))} ${esc(x.target)}</span>`).join(". ") + ".";
   const claims = d.claims.map((c) => `<li><span><span class="chip" data-step="${evStep[c.evidence_id] || ""}">${esc(c.evidence_id)}</span></span><span>${esc(c.statement)}</span></li>`).join("");
-  return `<div class="disposition"><div class="cause">${esc(CAUSES[d.cause] || d.cause)}</div>
+  return `<div class="disposition"><div class="cause">${esc(causeName(d.cause))}</div>
     <div class="actions">${acts}</div><ul class="claims">${claims}</ul><p class="summary">${esc(d.summary)}</p></div>`;
 }
 
 function signoffBlock(run) {
   if (run.signoff) {
     const s = run.signoff;
-    return `<div class="signoff"><span class="stamp ${s.decision}">${s.decision === "approve" ? "Approved" : "Rejected"}</span>
+    return `<div class="signoff"><span class="stamp ${s.decision}">${s.decision === "approve" ? L("Approved", "승인됨") : L("Rejected", "반려됨")}</span>
       <span class="soft"> ${esc(s.at)}${s.note ? `: ${esc(s.note)}` : ""}</span></div>`;
   }
-  if (STATIC) return `<div class="signoff soft">In the local version an engineer approves this here, or rejects it with a typed or spoken note and the agent investigates again.</div>`;
-  const reject = state.method === "agent" ? "Reject and send back" : "Reject";
-  return `<div class="signoff"><b>Engineer sign-off</b>
-    <textarea id="signnote" placeholder="Note for the record. If you reject, the agent gets this note and investigates again."></textarea>
-    <div class="row"><button class="btn approve" id="approve">Approve</button><button class="btn reject" id="reject">${reject}</button>
-      <button class="btn ghost" id="mic" aria-pressed="false">Speak a note</button><span class="soft" id="micstate"></span></div></div>`;
+  if (STATIC) return `<div class="signoff soft">${L("In the local version an engineer approves this here, or rejects it with a typed or spoken note and the agent investigates again.", "로컬 버전에서는 엔지니어가 여기서 승인하거나, 글이나 음성 메모를 남겨 반려합니다. 반려하면 에이전트가 그 메모를 받아 다시 조사합니다.")}</div>`;
+  const reject = state.method === "agent" ? L("Reject and send back", "반려하고 재조사") : L("Reject", "반려");
+  return `<div class="signoff"><b>${L("Engineer sign-off", "엔지니어 승인")}</b>
+    <textarea id="signnote" placeholder="${L("Note for the record. If you reject, the agent gets this note and investigates again.", "기록용 메모. 반려하면 에이전트가 이 메모를 받아 다시 조사합니다.")}"></textarea>
+    <div class="row"><button class="btn approve" id="approve">${L("Approve", "승인")}</button><button class="btn reject" id="reject">${reject}</button>
+      <button class="btn ghost" id="mic" aria-pressed="false">${L("Speak a note", "음성 메모")}</button><span class="soft" id="micstate"></span></div></div>`;
 }
 
 function bindTraveler() {
@@ -714,7 +849,7 @@ function bindTraveler() {
   const ap = $("#approve"), rj = $("#reject");
   const send = async (decision) => {
     const note = $("#signnote").value;
-    if (decision === "reject" && state.method === "agent" && !note.trim()) { $("#signnote").focus(); $("#signnote").placeholder = "Write what the agent got wrong, so it can investigate again."; return; }
+    if (decision === "reject" && state.method === "agent" && !note.trim()) { $("#signnote").focus(); $("#signnote").placeholder = L("Write what the agent got wrong, so it can investigate again.", "에이전트가 무엇을 틀렸는지 적어 주세요. 그 내용으로 다시 조사합니다."); return; }
     const r = await api("/api/signoff", { method: state.method, case: state.caseId, decision, note });
     if (r.error) alertBar(r.error);
     if (r.rerun && r.rerun.error) alertBar(r.rerun.error);
@@ -730,7 +865,7 @@ let recorder = null;
 async function startRecording() {
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true } }); }
-  catch (e) { $("#micstate").textContent = "Microphone access was blocked. Allow it in the browser and try again."; return; }
+  catch (e) { $("#micstate").textContent = L("Microphone access was blocked. Allow it in the browser and try again.", "마이크 권한이 막혀 있습니다. 브라우저에서 허용한 뒤 다시 시도하세요."); return; }
   const ctx = new AudioContext();
   const src = ctx.createMediaStreamSource(stream);
   const proc = ctx.createScriptProcessor(4096, 1, 1);
@@ -738,20 +873,20 @@ async function startRecording() {
   proc.onaudioprocess = (ev) => chunks.push(new Float32Array(ev.inputBuffer.getChannelData(0)));
   src.connect(proc); proc.connect(ctx.destination);
   recorder = { ctx, stream, proc, src, chunks, rate: ctx.sampleRate };
-  $("#mic").textContent = "Stop and transcribe"; $("#mic").setAttribute("aria-pressed", "true");
-  $("#micstate").textContent = "Listening…";
+  $("#mic").textContent = L("Stop and transcribe", "멈추고 받아쓰기"); $("#mic").setAttribute("aria-pressed", "true");
+  $("#micstate").textContent = L("Listening…", "듣는 중…");
 }
 async function stopRecording() {
   const r = recorder; recorder = null;
   r.proc.disconnect(); r.src.disconnect(); r.stream.getTracks().forEach((t) => t.stop()); await r.ctx.close();
-  $("#mic").textContent = "Speak a note"; $("#mic").setAttribute("aria-pressed", "false");
-  $("#micstate").textContent = "Transcribing with Muse Voice Transcribe…";
+  $("#mic").textContent = L("Speak a note", "음성 메모"); $("#mic").setAttribute("aria-pressed", "false");
+  $("#micstate").textContent = L("Transcribing with Muse Voice Transcribe…", "Muse Voice Transcribe로 받아쓰는 중…");
   const wav = toWav(r.chunks, r.rate, 16000);
   const res = await fetch("/api/transcribe", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: wav }).then((x) => x.json());
   if (res.error) { $("#micstate").textContent = res.error; return; }
   const box = $("#signnote");
   box.value = (box.value.trim() ? box.value.trim() + " " : "") + res.text;
-  $("#micstate").textContent = "Transcribed by " + res.model + ". Edit if needed.";
+  $("#micstate").textContent = L("Transcribed by " + res.model + ". Edit if needed.", res.model + "로 받아썼습니다. 필요하면 고치세요.");
 }
 function toWav(chunks, inRate, outRate) {
   const total = chunks.reduce((n, c) => n + c.length, 0), input = new Float32Array(total);
@@ -795,7 +930,7 @@ function chart(ctx) {
   for (const p of mine) s += `<circle cx="${x(p.t)}" cy="${y(p.v)}" r="3" fill="var(--ink)"><title>${p.lot}: ${p.v} (${p.met})</title></circle>`;
   const last = mine[mine.length - 1];
   if (last && ctx.alarm.type !== "FDC" && last.lot === ctx.alarm.lot_id) s += `<circle cx="${x(last.t)}" cy="${y(last.v)}" r="6.5" fill="none" stroke="var(--hold)" stroke-width="2"/>`;
-  s += `<text x="${P.l}" y="${H - 6}">−24 h</text><text x="${W - P.r}" y="${H - 6}" text-anchor="end">now</text></svg>`;
+  s += `<text x="${P.l}" y="${H - 6}">−24 h</text><text x="${W - P.r}" y="${H - 6}" text-anchor="end">${KO() ? "현재" : "now"}</text></svg>`;
   return s;
 }
 function heaterChart(ctx) {
@@ -810,36 +945,37 @@ function heaterChart(ctx) {
 function renderSide() {
   const ctx = state.ctx, run = state.run;
   if (!ctx) { $("#side").innerHTML = ""; return; }
-  let html = `<section><h2>${esc(ctx.chamber)}, wafer means, last 24 h</h2>${chart(ctx)}
-    <div class="cap">Black: ${esc(ctx.chamber)}. Grey: other chambers. Dashed red: spec. Dotted amber: control limits.</div></section>`;
-  if (ctx.alarm.type === "FDC") html += `<section><h2>${esc(ctx.chamber)} heater temperature, °C</h2>${heaterChart(ctx)}<div class="cap">What the sensor reports, run by run.</div></section>`;
+  let html = `<section><h2>${L(`${esc(ctx.chamber)}, wafer means, last 24 h`, `${esc(ctx.chamber)} 웨이퍼 평균, 최근 24시간`)}</h2>${chart(ctx)}
+    <div class="cap">${L(`Black: ${esc(ctx.chamber)}. Grey: other chambers. Dashed red: spec. Dotted amber: control limits.`, `검정: ${esc(ctx.chamber)}. 회색: 다른 챔버. 빨간 파선: 규격. 노란 점선: 관리 한계.`)}</div></section>`;
+  if (ctx.alarm.type === "FDC") html += `<section><h2>${L(`${esc(ctx.chamber)} heater temperature, °C`, `${esc(ctx.chamber)} 히터 온도, °C`)}</h2>${heaterChart(ctx)}<div class="cap">${L("What the sensor reports, run by run.", "센서가 런마다 보고한 값입니다.")}</div></section>`;
   const maps = [];
-  if (ctx.alarm.type !== "FDC") maps.push({ src: waferSrc(state.caseId, ctx.alarm.lot_id), cap: `${ctx.alarm.lot_id}, as measured at the alarm` });
+  if (ctx.alarm.type !== "FDC") maps.push({ src: waferSrc(state.caseId, ctx.alarm.lot_id), cap: L(`${ctx.alarm.lot_id}, as measured at the alarm`, `${ctx.alarm.lot_id}, 알람 당시 측정`) });
   for (const s of (run && run.trace) || []) {
     if (s.tool === "get_wafer_map" && s.result && s.result.image) {
       maps.push({ src: mapSrc(state.method === "compare" ? "agent" : state.method, state.caseId, s.result.image), cap: `${s.result.lot_id}, ${pattern(s.result.pattern)} (${s.result.segmenter})` });
     }
   }
-  if (maps.length) html += `<section><h2>Wafer maps</h2><div class="maps">${maps.map((m) => `<figure><img src="${m.src}" alt="Thickness map, red where thicker than the wafer's own mean"><figcaption>${esc(m.cap)}</figcaption></figure>`).join("")}</div>
-    <div class="cap">Red: more than 3 Å thicker than the wafer's own mean.</div></section>`;
+  if (maps.length) html += `<section><h2>${L("Wafer maps", "웨이퍼 맵")}</h2><div class="maps">${maps.map((m) => `<figure><img src="${m.src}" alt="Thickness map, red where thicker than the wafer's own mean"><figcaption>${esc(m.cap)}</figcaption></figure>`).join("")}</div>
+    <div class="cap">${L("Red: more than 3 Å thicker than the wafer's own mean.", "빨강: 그 웨이퍼 평균보다 3 Å 넘게 두꺼운 곳.")}</div></section>`;
   if (run) {
     const c = run.costs || {};
-    html += `<section><h2>What it cost</h2><div class="costs">
-      <span>Tool calls</span><span>${c.tool_calls ?? "–"}</span>
-      <span>Measurements</span><span>${c.measurements ?? 0}</span>
-      <span>Lot delay</span><span>${c.lot_delay_h ?? 0} h</span>
-      <span>Disposition attempts</span><span>${c.disposition_tries ?? 0}</span>
-      ${run.tokens ? `<span>Tokens</span><span>${Number(run.tokens).toLocaleString()}</span>` : ""}
-      ${run.model ? `<span>Model</span><span>${esc(run.model)}</span>` : ""}</div></section>`;
+    html += `<section><h2>${L("What it cost", "든 비용")}</h2><div class="costs">
+      <span>${L("Tool calls", "도구 호출")}</span><span>${c.tool_calls ?? "–"}</span>
+      <span>${L("Measurements", "추가 측정")}</span><span>${c.measurements ?? 0}</span>
+      <span>${L("Lot delay", "lot 지연")}</span><span>${c.lot_delay_h ?? 0} h</span>
+      <span>${L("Disposition attempts", "제출 횟수")}</span><span>${c.disposition_tries ?? 0}</span>
+      ${run.tokens ? `<span>${L("Tokens", "토큰")}</span><span>${Number(run.tokens).toLocaleString()}</span>` : ""}
+      ${run.model ? `<span>${L("Model", "모델")}</span><span>${esc(run.model)}</span>` : ""}</div></section>`;
     if (run.truth) {
       const sc = run.score || {};
-      html += `<section><h2>Ground truth</h2>${state.showTruth
-        ? `<div class="truth"><b>${esc(CAUSES[run.truth.cause])}.</b> ${esc(run.truth.explanation)}
-            ${run.truth.confounder ? `<div class="cap">Planted distraction: ${esc(run.truth.confounder)}.</div>` : ""}
-            ${sc.decision_correct !== undefined ? `<p>${sc.decision_correct ? "The decision matches." : "The decision does not match."}</p>` : ""}
-            ${state.sources ? `<div class="cap"><b>Why this scenario is realistic.</b> ${esc(state.sources.practitioner)}</div>
+      html += `<section><h2>${L("Ground truth", "실제 원인")}</h2>${state.showTruth
+        ? `<div class="truth"><b>${esc(causeName(run.truth.cause))}.</b> ${esc(run.truth.explanation)}
+            ${run.truth.confounder ? `<div class="cap">${L("Planted distraction", "일부러 심어 둔 함정")}: ${esc(run.truth.confounder)}.</div>` : ""}
+            ${sc.decision_correct !== undefined ? `<p>${sc.decision_correct ? L("The decision matches.", "결정이 정답과 맞습니다.") : L("The decision does not match.", "결정이 정답과 다릅니다.")}</p>` : ""}
+            ${KO() ? `<div class="cap">시나리오 설명과 근거 자료는 영어 원문입니다.</div>` : ""}
+            ${state.sources ? `<div class="cap"><b>${L("Why this scenario is realistic.", "이 시나리오가 현실적인 이유.")}</b> ${esc(state.sources.practitioner)}</div>
               <ul class="refs">${state.sources.public.map(([t, u, why]) => `<li><a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)}</a>: ${esc(why)}</li>`).join("")}</ul>` : ""}</div>`
-        : `<button class="btn ghost" id="reveal">Show what really happened</button><div class="cap">Hidden from the agent and the tools. Only for review.</div>`}</section>`;
+        : `<button class="btn ghost" id="reveal">${L("Show what really happened", "실제 원인 보기")}</button><div class="cap">${L("Hidden from the agent and the tools. Only for review.", "에이전트와 도구에는 보이지 않는 정보입니다. 검토용으로만 엽니다.")}</div>`}</section>`;
     }
   }
   $("#side").innerHTML = html;
@@ -850,12 +986,15 @@ function renderSide() {
 /* ---------------- benchmark ---------------- */
 async function renderBench() {
   const data = await api("/api/benchmark");
-  const keys = [["decision_accuracy", "Right decision", (v) => Math.round(v * 100) + "%"], ["missed_faults", "Missed real faults"], ["needless_holds", "Needless holds"], ["ungrounded_cases", "Unsupported claims", (v) => v ?? 0], ["rule_broken_cases", "Safety rule broken", (v) => v ?? 0], ["avg_tool_calls", "Tool calls"], ["avg_measurements", "Measurements"], ["avg_lot_delay_h", "Lot delay, h"]];
-  let html = `<h1>Benchmark</h1><p class="lead">Every method investigates the same simulated alarms through the same tools and the same verifier. The development set was used while building the agent. The held-out set was run once; after reading its one failure we added a single line of process knowledge and checked that version on a fresh held-out set nobody had seen.</p>`;
-  for (const [split, title] of [["holdout2", "Fresh held-out alarms (after the fix)"], ["holdout", "Held-out alarms"], ["dev", "Development alarms"]]) {
+  const keys = [["decision_accuracy", L("Right decision", "맞는 결정"), (v) => Math.round(v * 100) + "%"], ["missed_faults", L("Missed real faults", "놓친 실제 불량")], ["needless_holds", L("Needless holds", "불필요한 홀드")], ["ungrounded_cases", L("Unsupported claims", "근거 없는 주장"), (v) => v ?? 0], ["rule_broken_cases", L("Safety rule broken", "안전 규칙 위반"), (v) => v ?? 0], ["avg_tool_calls", L("Tool calls", "도구 호출")], ["avg_measurements", L("Measurements", "추가 측정")], ["avg_lot_delay_h", L("Lot delay, h", "lot 지연, 시간")]];
+  let html = KO()
+    ? `<h1>성능 비교</h1><p class="lead">모든 방법이 같은 가상 알람을 같은 도구와 같은 검증기로 조사합니다. 개발 세트는 에이전트를 만드는 동안 썼습니다. 평가 세트는 한 번만 돌렸고, 거기서 나온 실패 하나를 읽고 공정 지식 한 줄을 더한 뒤, 아무도 본 적 없는 새 평가 세트로 그 버전을 확인했습니다.</p>`
+    : `<h1>Benchmark</h1><p class="lead">Every method investigates the same simulated alarms through the same tools and the same verifier. The development set was used while building the agent. The held-out set was run once; after reading its one failure we added a single line of process knowledge and checked that version on a fresh held-out set nobody had seen.</p>`;
+  const splits = KO() ? [["holdout2", "새 평가 세트 (수정 후)"], ["holdout", "평가 세트"], ["dev", "개발 세트"]] : [["holdout2", "Fresh held-out alarms (after the fix)"], ["holdout", "Held-out alarms"], ["dev", "Development alarms"]];
+  for (const [split, title] of splits) {
     const ms = Object.keys(data[split] || {}).filter((m) => ["agent", "playbook"].includes(m));
-    if (!ms.length) { html += `<h2>${title}</h2><p class="lead">Not run yet.</p>`; continue; }
-    html += `<h2>${title} (${data[split][ms[0]].summary.n})</h2><table class="sum"><tr><th>Method</th>${keys.map((k) => `<th>${k[1]}</th>`).join("")}</tr>`;
+    if (!ms.length) { html += `<h2>${title}</h2><p class="lead">${L("Not run yet.", "아직 돌리지 않았습니다.")}</p>`; continue; }
+    html += `<h2>${title} (${data[split][ms[0]].summary.n})</h2><table class="sum"><tr><th>${L("Method", "방법")}</th>${keys.map((k) => `<th>${k[1]}</th>`).join("")}</tr>`;
     for (const m of Object.keys(BENCH_NAMES).filter((m) => data[split][m])) {
       const s = data[split][m].summary, rep = data[split][m].repeats;
       const cell = (k, f, i) => {
@@ -866,24 +1005,24 @@ async function renderBench() {
         if (rep && rep.mean_std[k]) return `${rep.mean_std[k].mean}`;
         return `${i === 0 ? `<span class="bar" style="width:${s[k] * 80}px"></span>` : ""}${f ? f(s[k]) : s[k]}`;
       };
-      html += `<tr class="${m}"><td>${BENCH_NAMES[m]}${rep ? `<div class="soft" style="font-size:12px">mean of ${rep.repeats} runs</div>` : ""}</td>${keys.map(([k, , f], i) => `<td>${cell(k, f, i)}</td>`).join("")}</tr>`;
+      html += `<tr class="${m}"><td>${benchName(m)}${rep ? `<div class="soft" style="font-size:12px">${L(`mean of ${rep.repeats} runs`, `${rep.repeats}회 평균`)}</div>` : ""}</td>${keys.map(([k, , f], i) => `<td>${cell(k, f, i)}</td>`).join("")}</tr>`;
     }
     html += `</table>`;
     const imp = data[split + "_impact"];
     if (imp && Object.keys(imp.methods).length) {
-      const cols = [["engineer_hours", "Engineer hours"], ["needless_holds", "Needless holds"], ["lot_hours_from_measurements", "Lot-hours waiting on measurements"], ["missed_faults", "Missed faults"], ["lots_at_risk", "Lots at risk"]];
-      html += `<h2>Per 100 alarms, under stated assumptions</h2><table class="sum"><tr><th>Method</th>${cols.map((c) => `<th>${c[1]}</th>`).join("")}</tr>`;
-      for (const m of Object.keys(BENCH_NAMES).filter((m) => imp.methods[m])) html += `<tr class="${m}"><td>${BENCH_NAMES[m]}</td>${cols.map(([k]) => `<td>${imp.methods[m][k]}</td>`).join("")}</tr>`;
-      html += `</table><ul class="legend">${Object.values(imp.assumptions).map((a) => `<li>${a.value}: ${esc(a.why)}</li>`).join("")}</ul>`;
+      const cols = [["engineer_hours", L("Engineer hours", "엔지니어 시간")], ["needless_holds", L("Needless holds", "불필요한 홀드")], ["lot_hours_from_measurements", L("Lot-hours waiting on measurements", "측정 대기 lot-시간")], ["missed_faults", L("Missed faults", "놓친 불량")], ["lots_at_risk", L("Lots at risk", "위험 lot")]];
+      html += `<h2>${L("Per 100 alarms, under stated assumptions", "알람 100건당 환산 (아래 가정 기준)")}</h2><table class="sum"><tr><th>${L("Method", "방법")}</th>${cols.map((c) => `<th>${c[1]}</th>`).join("")}</tr>`;
+      for (const m of Object.keys(BENCH_NAMES).filter((m) => imp.methods[m])) html += `<tr class="${m}"><td>${benchName(m)}</td>${cols.map(([k]) => `<td>${imp.methods[m][k]}</td>`).join("")}</tr>`;
+      html += `</table><ul class="legend">${Object.entries(imp.assumptions).map(([k, a]) => `<li>${a.value}: ${esc((KO() && ASSUME_KO[k]) || a.why)}</li>`).join("")}</ul>`;
     }
     const byCase = {};
     for (const m of ms) for (const r of data[split][m].rows) (byCase[r.case_id] ||= {})[m] = r.decision_correct;
     const order = data[split][ms.reduce((a, b) => (data[split][a].rows.length >= data[split][b].rows.length ? a : b))].rows.map((r) => r.case_id);
     const scen = [...new Set(order.map((k) => k.replace(/-\d+$/, "")))];
     const seeds = [...new Set(Object.keys(byCase).map((k) => k.match(/-(\d+)$/)[1]))].sort();
-    html += `<div class="legend">Each cell: playbook, then agent. Green is the right decision, red is wrong.</div><table class="grid"><tr><th>Scenario</th>${seeds.map((s) => `<th>Seed ${s}</th>`).join("")}</tr>`;
+    html += `<div class="legend">${L("Each cell: playbook, then agent. Green is the right decision, red is wrong.", "칸마다 왼쪽은 고정 규칙, 오른쪽은 에이전트입니다. 초록은 맞는 결정, 빨강은 틀린 결정입니다.")}</div><table class="grid"><tr><th>${L("Scenario", "시나리오")}</th>${seeds.map((s) => `<th>${L("Seed", "시드")} ${s}</th>`).join("")}</tr>`;
     for (const sc of scen) {
-      html += `<tr><td>${sc.replace(/_/g, " ")}</td>${seeds.map((sd) => {
+      html += `<tr><td>${(KO() && SCENARIO_KO[sc]) || sc.replace(/_/g, " ")}</td>${seeds.map((sd) => {
         const r = byCase[`${sc}-${sd}`] || {};
         const sq = (v) => `<span class="sq ${v === undefined ? "" : v ? "ok" : "bad"}"></span>`;
         return `<td><span class="cell">${sq(r.playbook)}${sq(r.agent)}</span></td>`;
@@ -901,6 +1040,21 @@ function showView(view) {
   if (view === "shift") renderShift();
 }
 for (const t of document.querySelectorAll("nav.tabs button")) t.onclick = () => showView(t.dataset.view);
+function setLang(lang) {
+  LANG = lang;
+  try { localStorage.setItem("fabtriage-lang", lang); } catch (e) {}
+  try { const u = new URL(location.href); if (u.searchParams.has("lang")) { u.searchParams.set("lang", lang); history.replaceState(null, "", u); } } catch (e) {}
+  applyStatic();
+  renderList();
+  if (!$("#shift").hidden) renderShift();
+  if (!$("#bench").hidden) renderBench();
+  if (!$("#console").hidden && state.caseId) {
+    if (state.method === "compare") renderCompare(); else renderTraveler(false);
+    renderSide();
+  }
+}
+for (const b of document.querySelectorAll(".lang button")) b.onclick = () => setLang(b.dataset.lang);
+applyStatic();
 if (STATIC) { $("#demobanner").hidden = false; document.documentElement.style.setProperty("--banner", "33px"); }
 loadCases().then(() => { renderShift(); selectCase(state.cases[0].case_id); });
 </script>

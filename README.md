@@ -3,6 +3,7 @@
 **An agent that investigates semiconductor fab alarms and proposes what to do about them, with every claim checked against the evidence before an engineer signs off.**
 
 **Live demo (read-only, built from saved runs): https://yhwang55.github.io/fabtriage/**
+Korean interface: https://yhwang55.github.io/fabtriage/demo/?lang=ko (agent output stays in its original English).
 
 Built during the Meta Global AI Developer Hackathon (Oct 26 to Nov 4, 2026). Everything in this repository was written during the event.
 
