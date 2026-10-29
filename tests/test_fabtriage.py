@@ -254,3 +254,96 @@ def test_repeats_and_impact(tmp_path):
     t = impact.table(tmp_path, "holdout")
     assert t["methods"]["always_hold"]["engineer_hours"] == 250.0
     assert t["methods"]["playbook"]["engineer_hours"] < 250.0
+
+
+# ------------------------------------------------------------------ recovery after PM
+
+
+@pytest.mark.parametrize("case_id", __import__("fabtriage.recovery", fromlist=["x"]).benchmark("all"))
+def test_recovery_tools_never_leak_the_truth(case_id):
+    from fabtriage import recovery as R
+
+    job = R.RecoveryJob(R.load(case_id))
+    job.call("get_recovery_brief", {})
+    job.call("get_chamber_history", {})
+    job.call("get_metrology_matching", {})
+    m = job.call("run_monitor_wafer", {"time_s": job.case.pre_pm_time_s})
+    job.call("estimate_recipe", {"monitor_evidence_ids": [m["evidence_id"]]})
+    text = json.dumps(job.trace)
+    names = [job.case.scenario] if "_" in job.case.scenario else []  # "seasoning" is also a PM record field
+    for secret in ("post_frac", "pre_frac", "season\"", "hidden", "truth", "scenario", *names):
+        assert secret not in text, secret
+
+
+def test_recovery_splits_and_determinism():
+    from fabtriage import recovery as R
+
+    assert not set(R.benchmark("dev")) & set(R.benchmark("holdout"))
+    a = R.run_out(R.load("rec_seasoning-1"), 61.0, 0.3, 0.0, 2)
+    b = R.run_out(R.generate("seasoning", 1), 61.0, 0.3, 0.0, 2)
+    assert a == b
+
+
+def test_recovery_verifier_rules():
+    from fabtriage import recovery as R
+
+    job = R.RecoveryJob(R.load("rec_post_pm_reset-1"))
+    b = job.call("get_recovery_brief", {})
+    h = job.call("get_chamber_history", {})
+    claims = [{"evidence_id": b["evidence_id"], "statement": "Wet clean done."}, {"evidence_id": h["evidence_id"], "statement": "History read."}]
+    r = job.call("release_chamber", {"time_s": job.case.pre_pm_time_s, "claims": claims, "summary": "x"})
+    assert not r["accepted"] and any("monitor wafer" in p for p in r["problems"])
+    r = job.call("release_chamber", {"time_s": 61.37, "claims": claims, "summary": "x"})
+    assert any("not from evidence" in p for p in r["problems"])
+    assert job.status == "running"
+    m = job.call("run_monitor_wafer", {"time_s": job.case.pre_pm_time_s, "met_tool": "MET01"})
+    e = job.call("estimate_recipe", {"monitor_evidence_ids": [m["evidence_id"]]})
+    r = job.call("release_chamber", {"time_s": e["recipe_time_s_for_500A"], "claims": claims, "summary": "x"})
+    assert r["accepted"], r
+    row, out = R.score(job)
+    assert row["status"] == "released" and len(out["lots"]) == R.N_LOTS
+
+
+def test_recovery_offset_must_come_from_matching():
+    from fabtriage import recovery as R
+
+    job = R.RecoveryJob(R.load("rec_metrology_bias-1"))
+    m = job.call("run_monitor_wafer", {"time_s": 61})
+    r = job.call("estimate_recipe", {"monitor_evidence_ids": [m["evidence_id"]], "met_offsets_A": {"MET02": 5}})
+    assert "error" in r
+    mm = job.call("get_metrology_matching", {})
+    r = job.call("estimate_recipe", {"monitor_evidence_ids": [m["evidence_id"]], "met_offsets_A": {"MET02": mm["MET02_minus_MET01_A"]}})
+    assert "error" not in r
+
+
+def test_recovery_agent_loop_with_fake_model(tmp_path):
+    from fabtriage import recovery as R, recovery_eval as RE
+
+    case = R.load("rec_no_shift-1")
+    step = {"n": 0}
+
+    def create(**kw):
+        step["n"] += 1
+        assert "recovery mode" in kw["instructions"] and any(t["name"] == "release_chamber" for t in kw["tools"])
+        outs = [json.loads(m["output"]) for m in kw["input"] if isinstance(m, dict) and m.get("type") == "function_call_output"]
+        if step["n"] == 1:
+            name, args = "get_recovery_brief", {}
+        elif step["n"] == 2:
+            name, args = "get_chamber_history", {}
+        else:
+            name, args = "release_chamber", {
+                "time_s": case.pre_pm_time_s,
+                "claims": [{"evidence_id": outs[0]["evidence_id"], "statement": f"PM did not open the chamber; pre-PM time {case.pre_pm_time_s} s."},
+                           {"evidence_id": outs[1]["evidence_id"], "statement": "Previous cycle was stable."}],
+                "summary": "Keep the recipe.",
+            }
+        call = SimpleNamespace(type="function_call", name=name, arguments=json.dumps(args), call_id=f"c{step['n']}")
+        return SimpleNamespace(output=[call], output_text="", usage=SimpleNamespace(total_tokens=10))
+
+    client = SimpleNamespace(responses=SimpleNamespace(create=create))
+    row = RE.run_one("agent", "rec_no_shift-1", tmp_path, client, "meta")
+    assert row["status"] == "released" and row["recipe_change_pct"] == 0.0 and row["off_target_lots"] == 0
+    for m in ("keep_recipe", "reset_recipe", "monitor_rule"):
+        RE.run_split(m, "holdout", tmp_path)
+    res = RE.load_results(tmp_path, "holdout")
+    assert {"keep_recipe", "reset_recipe", "monitor_rule"} <= set(res)

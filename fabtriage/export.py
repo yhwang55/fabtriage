@@ -59,4 +59,16 @@ def export(out: Path) -> dict:
                     dest.parent.mkdir(parents=True, exist_ok=True)
                     shutil.copyfile(f, dest)
                     n_maps += 1
-    return {"out": str(out), "cases": len(cases), "runs": n_runs, "maps": n_maps}
+    from . import recovery as R
+
+    rec = server.recovery_cases()
+    _write(out / "data" / "recovery" / "cases.json", {"cases": rec})
+    n_rec = 0
+    for cid in R.benchmark("all"):
+        for m in server.REC_METHODS:
+            run = server.recovery_run(m, cid)
+            if run:
+                run.pop("live", None)
+                _write(out / "data" / "recovery" / "run" / m / f"{cid}.json", {"run": run})
+                n_rec += 1
+    return {"out": str(out), "cases": len(cases), "runs": n_runs, "maps": n_maps, "recovery_runs": n_rec}

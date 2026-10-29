@@ -108,25 +108,34 @@ def _with_retry(fn, tries: int = 3, wait_s: float = 15.0):
             time.sleep(wait_s * (attempt + 1))
 
 
-def _last_turn_nudge(turn: int, max_turns: int) -> str | None:
+def _last_turn_nudge(turn: int, max_turns: int, final_tool: str = "submit_disposition") -> str | None:
     if turn == max_turns - 1:
-        return "This is your last turn. Call submit_disposition now with the evidence you have."
+        return f"This is your last turn. Call {final_tool} now with the evidence you have."
     return None
 
 
+def _setup(inv, engineer_note):
+    """The diagnosis job uses this module's prompt and tools; other jobs (recovery) bring their own."""
+    system = getattr(inv, "SYSTEM", SYSTEM)
+    definitions = getattr(inv, "DEFINITIONS", DEFINITIONS)
+    kickoff = inv.kickoff(engineer_note) if hasattr(inv, "kickoff") else _kickoff(inv, engineer_note)
+    return system, definitions, kickoff, getattr(inv, "FINAL_TOOL", "submit_disposition")
+
+
 def _responses(inv: Investigation, client, model: str, max_turns: int, engineer_note=None):
-    tools = [{"type": "function", **d} for d in DEFINITIONS]
-    messages: list = [{"role": "user", "content": _kickoff(inv, engineer_note)}]
+    system, definitions, kickoff, final_tool = _setup(inv, engineer_note)
+    tools = [{"type": "function", **d} for d in definitions]
+    messages: list = [{"role": "user", "content": kickoff}]
     tokens, notes = 0, inv.notes
     for turn in range(max_turns):
-        nudge = _last_turn_nudge(turn, max_turns)
+        nudge = _last_turn_nudge(turn, max_turns, final_tool)
         if nudge:
             messages.append({"role": "user", "content": nudge})
         try:
             response = _with_retry(
                 lambda: client.responses.create(
                     model=model,
-                    instructions=SYSTEM,
+                    instructions=system,
                     input=messages,
                     tools=tools,
                     parallel_tool_calls=False,
@@ -154,11 +163,12 @@ def _responses(inv: Investigation, client, model: str, max_turns: int, engineer_
 
 
 def _chat(inv: Investigation, client, model: str, max_turns: int, engineer_note=None):
-    tools = [{"type": "function", "function": d} for d in DEFINITIONS]
-    messages: list = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": _kickoff(inv, engineer_note)}]
+    system, definitions, kickoff, final_tool = _setup(inv, engineer_note)
+    tools = [{"type": "function", "function": d} for d in definitions]
+    messages: list = [{"role": "system", "content": system}, {"role": "user", "content": kickoff}]
     tokens, notes = 0, inv.notes
     for turn in range(max_turns):
-        nudge = _last_turn_nudge(turn, max_turns)
+        nudge = _last_turn_nudge(turn, max_turns, final_tool)
         if nudge:
             messages.append({"role": "user", "content": nudge})
         try:

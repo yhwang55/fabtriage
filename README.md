@@ -111,6 +111,31 @@ Assumptions, from `python -m fabtriage impact`: a manual investigation of a held
 - Fourteen cases per held-out set is small; one wrong case moves accuracy by 7 points.
 - The scenarios follow public sources and practitioner input ([docs/SCENARIOS.md](docs/SCENARIOS.md)), but the simulator is not calibrated to production data.
 
+## Recovery after PM
+
+Diagnosis ends with "hold the chamber". The second job starts there: bring the held chamber
+back to the 500 Å target and release it. The idea comes from Prof. Jang (장재연, The Catholic
+University of Korea): run-to-run models need many runs and lose their footing after PM, so
+engineers re-center the recipe with guide rules and experience. Can the agent do that part?
+
+The agent reads the PM record, the chamber's history from earlier PMs and the latest
+metrology matching check, runs up to four monitor wafers (0.5 h of chamber time each), gets
+a recipe from a rate estimate, and releases the chamber with cited evidence. The same kind of
+verifier checks every release: numbers must come from evidence, a chamber that was opened
+needs at least one monitor wafer, and one recipe change is capped at 8%. Then 40 production
+lots run under an EWMA controller and are scored on the true film.
+
+Five hidden scenarios: the clean reset the rate, seasoning was skipped (first wafers come out
+thin), a new part drifts fast, a metrology tool reads high, and nothing changed. Compared
+against keeping the old recipe, going back to the baseline recipe, and a two-monitor-wafer
+rule. Success criteria were written before any agent run: [docs/RECOVERY.md](docs/RECOVERY.md).
+
+```bash
+python -m fabtriage recover --method monitor_rule --split holdout
+python -m fabtriage recover --method agent --split holdout --repeats 3
+python -m fabtriage recover-report --split holdout
+```
+
 ## Run it
 
 See it without an API key:

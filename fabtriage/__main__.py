@@ -6,6 +6,8 @@
     python -m fabtriage run --case pm_shift-1 --method agent
     python -m fabtriage compare --split dev
     python -m fabtriage serve            # the console at http://127.0.0.1:8770
+    python -m fabtriage recover --method agent --split dev     # recovery after PM
+    python -m fabtriage recover-report --split holdout
 """
 
 from __future__ import annotations
@@ -50,6 +52,14 @@ def main(argv=None) -> None:
     rs.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "all"])
     im = sub.add_parser("impact", help="per-100-alarm impact under stated assumptions")
     im.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "all"])
+    rc = sub.add_parser("recover", help="recovery after PM: bring a held chamber back to target")
+    rc.add_argument("--method", required=True, choices=["agent", "monitor_rule", "reset_recipe", "keep_recipe"])
+    rc.add_argument("--split", default="dev", choices=["dev", "holdout", "all"])
+    rc.add_argument("--backend", default="meta", choices=["meta", "baseten"])
+    rc.add_argument("--only", nargs="*", help="scenario names, e.g. seasoning fast_drift")
+    rc.add_argument("--repeats", type=int, default=1)
+    rr = sub.add_parser("recover-report", help="recovery results and the pre-registered success criteria")
+    rr.add_argument("--split", default="holdout", choices=["dev", "holdout", "all"])
     dm = sub.add_parser("demo", help="open the read-only demo from docs/demo; no API key needed")
     dm.add_argument("--port", type=int, default=8771)
     ex = sub.add_parser("export", help="write the console as a static read-only site")
@@ -92,6 +102,26 @@ def main(argv=None) -> None:
         print("per 100 alarms".ljust(18) + "".join(c[:16].rjust(18) for c in cols))
         for method, row in t["methods"].items():
             print(method.ljust(18) + "".join(str(row[c]).rjust(18) for c in cols))
+    elif args.cmd in ("recover", "recover-report"):
+        from . import recovery_eval as RE
+
+        rdir = RUNS / "recovery"
+        if args.cmd == "recover":
+            client = make_client(args.backend) if args.method == "agent" else None
+            if args.repeats > 1:
+                out = RE.run_repeats(args.method, args.split, rdir, args.repeats, client, args.backend)
+                print(json.dumps(out["mean_std"], indent=2))
+            else:
+                out = RE.run_split(args.method, args.split, rdir, client, args.backend, args.only)
+                print(json.dumps(out["summary"], indent=2))
+        else:
+            res = RE.load_results(rdir, args.split)
+            cols = ["off_target_lots", "out_of_spec_lots", "avg_monitor_wafers", "avg_downtime_h", "needs_engineer", "rule_broken_cases", "no_shift_max_change_pct"]
+            print("method".ljust(16) + "".join(c[:14].rjust(16) for c in cols))
+            for m, d in res.items():
+                print(m.ljust(16) + "".join(str(d["summary"][c]).rjust(16) for c in cols))
+            for c in RE.criteria(res):
+                print(("MET  " if c["met"] else "MISS ") + f"{c['criterion']}: {c['value']}")
     elif args.cmd == "demo":
         import functools
         import http.server

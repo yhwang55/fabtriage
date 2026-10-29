@@ -122,6 +122,56 @@ def benchmark() -> dict:
         from .impact import table
 
         out[split + "_impact"] = table(RUNS, split)
+    out["recovery"] = recovery_benchmark()
+    return out
+
+
+# ---------------------------------------------------------------- recovery after PM
+REC_METHODS = ["agent", "monitor_rule", "reset_recipe", "keep_recipe"]
+
+
+def recovery_cases() -> list:
+    from . import recovery as R
+
+    out = []
+    for split in ("dev", "holdout"):
+        for cid in R.benchmark(split):
+            c = R.load(cid)
+            runs = {}
+            for m in REC_METHODS:
+                path = RUNS / "recovery" / m / cid / "run.json"
+                if path.exists():
+                    try:
+                        sc = json.loads(path.read_text()).get("score") or {}
+                    except ValueError:
+                        continue
+                    runs[m] = {k: sc.get(k) for k in ("status", "off_target_lots", "out_of_spec_lots", "monitor_wafers", "recipe_change_pct")}
+            out.append({"case_id": cid, "split": split, "chamber": c.chamber, "pm": c.pm, "pre_pm_time_s": c.pre_pm_time_s, "runs": runs})
+    return out
+
+
+def recovery_run(method: str, case_id: str) -> dict | None:
+    from . import recovery as R
+
+    if method not in REC_METHODS or case_id not in R.benchmark("all"):
+        raise ValueError("unknown method or case")
+    path = RUNS / "recovery" / method / case_id / "run.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text())
+    except ValueError:
+        return None
+
+
+def recovery_benchmark() -> dict:
+    from . import recovery_eval as RE
+
+    out = {}
+    for split in ("dev", "holdout"):
+        res = RE.load_results(RUNS / "recovery", split)
+        out[split] = {m: {"summary": d["summary"], "repeats": (d.get("repeats") or {}).get("mean_std")} for m, d in res.items()}
+        out[split + "_criteria"] = RE.criteria(res)
     return out
 
 
@@ -213,6 +263,10 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json(
                     {"run": _read_run(q["method"], q["case"]), "live": q["case"] in _live, "sources": SOURCES.get(scenario)}
                 )
+            if url.path == "/api/recovery/cases":
+                return self._json({"cases": recovery_cases()})
+            if url.path == "/api/recovery/run":
+                return self._json({"run": recovery_run(q["method"], q["case"])})
             if url.path == "/api/context":
                 return self._json(context(q["case"]))
             if url.path == "/api/benchmark":
