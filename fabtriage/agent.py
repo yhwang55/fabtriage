@@ -29,6 +29,9 @@ How this area works
 - Metrology tools can misread. A re-measurement on the other tool tells a misread from a real film change.
 - FDC sensors log every run. A sensor can fail and report a change that never happened to the wafer;
   a real temperature change does show up in film thickness on wafers processed after it started.
+- Deposition rate rises with temperature. If the heater really ran hotter, wafers processed after the
+  change come out thicker. Film that stays inside control limits, or moves the other way, points to the
+  sensor rather than the heater.
 - Single wafers sometimes come out a little off for no lasting reason.
 
 Causes you can conclude

@@ -20,7 +20,7 @@ from .client import has_key, make_client
 
 WEB = Path(__file__).parent / "web"
 RUNS = Path("runs")
-METHODS = ["agent", "playbook", "always_hold", "agent_noverify", "oneshot", "agent_baseten"]
+METHODS = ["agent", "playbook", "always_hold"]
 _live: dict = {}  # case_id -> thread
 _lock = threading.Lock()
 
@@ -218,18 +218,11 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         url = urlparse(self.path)
         length = int(self.headers.get("Content-Length") or 0)
-        if length > 32 * 1024 * 1024:
-            return self._json({"error": "recording too large"}, 413)
-        raw = self.rfile.read(length)
         try:
-            body = json.loads(raw or b"{}") if url.path != "/api/transcribe" else {}
+            body = json.loads(self.rfile.read(length) or b"{}")
             if url.path == "/api/live":
                 sim.load(body["case"])
                 return self._json(start_live(body["case"], body.get("engineer_note")))
-            if url.path == "/api/transcribe":
-                from .voice import transcribe
-
-                return self._json(transcribe(raw))
             if url.path == "/api/signoff":
                 return self._json(signoff(body["method"], body["case"], body["decision"], body.get("note", "")))
             self._json({"error": "not found"}, 404)

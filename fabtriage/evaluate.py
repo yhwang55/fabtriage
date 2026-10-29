@@ -111,6 +111,46 @@ def run_one(
     return row
 
 
+def run_repeats(
+    method: str, split: str, runs_dir: Path, repeats: int, client=None, backend=None, sam_client=None
+) -> dict:
+    """Run a split several times. Repeat 1 lands in the normal place (the console shows it);
+    repeats 2..n go to runs/repeats/r<k>/. Writes results_<label>_<split>_repeats.json."""
+    label = method if backend in (None, "meta") or method not in MODEL_METHODS else f"{method}_{backend}"
+    summaries, per_case = [], {}
+    for k in range(1, repeats + 1):
+        print(f"--- repeat {k} of {repeats}", flush=True)
+        where = runs_dir if k == 1 else runs_dir / "repeats" / f"r{k}"
+        result = run_split(method, split, where, client, backend, sam_client=sam_client)
+        summaries.append(result["summary"])
+        for r in result["rows"]:
+            per_case.setdefault(r["case_id"], []).append(bool(r["decision_correct"]))
+    out = {
+        "method": label,
+        "split": split,
+        "repeats": repeats,
+        "summaries": summaries,
+        "mean_std": spread(summaries),
+        "cases_always_right": sum(1 for v in per_case.values() if all(v)),
+        "cases_sometimes_wrong": {c: f"{sum(v)}/{len(v)}" for c, v in per_case.items() if not all(v)},
+    }
+    path = runs_dir / f"results_{label}_{split}_repeats.json"
+    path.write_text(json.dumps(out, indent=2))
+    return out
+
+
+def spread(summaries: list) -> dict:
+    keys = ["decision_accuracy", "cause_accuracy", "missed_faults", "needless_holds", "rule_broken_cases",
+            "avg_tool_calls", "avg_measurements", "avg_lot_delay_h", "total_tokens"]
+    out = {}
+    for k in keys:
+        vals = [float(s.get(k) or 0) for s in summaries]
+        mean = sum(vals) / len(vals)
+        var = sum((v - mean) ** 2 for v in vals) / (len(vals) - 1) if len(vals) > 1 else 0.0
+        out[k] = {"mean": round(mean, 3), "std": round(var**0.5, 3)}
+    return out
+
+
 def run_split(
     method: str, split: str, runs_dir: Path, client=None, backend=None, limit=None, only=None, sam_client=None
 ) -> dict:

@@ -33,20 +33,23 @@ def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="fabtriage")
     sub = p.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("cases")
-    c.add_argument("--split", default="all", choices=["dev", "holdout", "all"])
+    c.add_argument("--split", default="all", choices=["dev", "holdout", "holdout2", "all"])
     e = sub.add_parser("eval")
     e.add_argument("--method", required=True, choices=["agent", "agent_noverify", "oneshot", "playbook", "always_hold"])
-    e.add_argument("--split", default="dev", choices=["dev", "holdout", "all"])
+    e.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "all"])
     e.add_argument("--backend", default="meta", choices=["meta", "baseten"])
     e.add_argument("--limit", type=int)
     e.add_argument("--only", nargs="*", help="scenario name prefixes, e.g. pm_shift heater_drift")
+    e.add_argument("--repeats", type=int, default=1, help="run the split this many times and report mean and spread")
     r = sub.add_parser("run")
     r.add_argument("--case", required=True)
     r.add_argument("--method", default="agent", choices=["agent", "agent_noverify", "oneshot", "playbook", "always_hold"])
     r.add_argument("--backend", default="meta", choices=["meta", "baseten"])
     rs = sub.add_parser("rescore", help="rebuild a results file from saved runs")
     rs.add_argument("--method", required=True, choices=["agent", "agent_noverify", "oneshot", "playbook", "always_hold"])
-    rs.add_argument("--split", default="dev", choices=["dev", "holdout", "all"])
+    rs.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "all"])
+    im = sub.add_parser("impact", help="per-100-alarm impact under stated assumptions")
+    im.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "all"])
     sv = sub.add_parser("serve")
     sv.add_argument("--port", type=int, default=8770)
     cmp_ = sub.add_parser("compare")
@@ -58,6 +61,10 @@ def main(argv=None) -> None:
             case = sim.load(cid)
             a = case.alarm
             print(f"{cid:20s} {a['type']:4s} {a['chamber']:8s} {a['value']!s:9s} confounder={case.truth['confounder']}")
+    elif args.cmd == "eval" and args.repeats > 1:
+        client, sam = _clients(args.method, args.backend)
+        out = evaluate.run_repeats(args.method, args.split, RUNS, args.repeats, client, args.backend, sam)
+        print(json.dumps({k: out[k] for k in ("mean_std", "cases_always_right", "cases_sometimes_wrong")}, indent=2))
     elif args.cmd == "eval":
         client, sam = _clients(args.method, args.backend)
         result = evaluate.run_split(
@@ -71,6 +78,16 @@ def main(argv=None) -> None:
         print(f"trace: {RUNS / args.method / args.case / 'run.json'}")
     elif args.cmd == "rescore":
         print(json.dumps(evaluate.rescore(args.method, args.split, RUNS)["summary"], indent=2))
+    elif args.cmd == "impact":
+        from .impact import table
+
+        t = table(RUNS, args.split)
+        for k, v in t["assumptions"].items():
+            print(f"assume {k} = {v['value']}  ({v['why']})")
+        cols = ["engineer_hours", "needless_holds", "lot_hours_from_needless_holds", "lot_hours_from_measurements", "missed_faults", "lots_at_risk"]
+        print("per 100 alarms".ljust(18) + "".join(c[:16].rjust(18) for c in cols))
+        for method, row in t["methods"].items():
+            print(method.ljust(18) + "".join(str(row[c]).rjust(18) for c in cols))
     elif args.cmd == "serve":
         from .server import serve
 

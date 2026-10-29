@@ -403,11 +403,17 @@ def remeasure(case: Case, lot_id: str, met_tool: str, n_previous: int) -> dict:
 # -------------------------------------------------------------- benchmark set
 
 DEV_SEEDS = [1, 2, 3, 4]
-HOLDOUT_SEEDS = [5, 6]
+HOLDOUT_SEEDS = [5, 6]  # first held-out set, run once on Oct 28
+HOLDOUT2_SEEDS = [7, 8]  # fresh held-out set for the version fixed after reading holdout failures
 
 
 def benchmark(split: str = "dev") -> list:
-    seeds = {"dev": DEV_SEEDS, "holdout": HOLDOUT_SEEDS, "all": DEV_SEEDS + HOLDOUT_SEEDS}[split]
+    seeds = {
+        "dev": DEV_SEEDS,
+        "holdout": HOLDOUT_SEEDS,
+        "holdout2": HOLDOUT2_SEEDS,
+        "all": DEV_SEEDS + HOLDOUT_SEEDS + HOLDOUT2_SEEDS,
+    }[split]
     return [f"{s}-{seed}" for s in SCENARIOS for seed in seeds]
 
 

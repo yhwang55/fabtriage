@@ -16,7 +16,8 @@ def test_simulator_is_deterministic():
 
 def test_benchmark_splits_do_not_overlap():
     assert not set(sim.benchmark("dev")) & set(sim.benchmark("holdout"))
-    assert len(sim.benchmark("all")) == len(sim.SCENARIOS) * 6
+    assert len(sim.benchmark("all")) == len(sim.SCENARIOS) * 8
+    assert not set(sim.benchmark("holdout2")) & set(sim.benchmark("dev") + sim.benchmark("holdout"))
 
 
 @pytest.mark.parametrize("case_id", sim.benchmark("all"))
@@ -241,3 +242,15 @@ def test_voice_multipart_and_guards(monkeypatch):
     assert "error" in voice.transcribe(b"RIFF")
     monkeypatch.setenv("MODEL_API_KEY", "k")
     assert "error" in voice.transcribe(b"not a wav")
+
+
+def test_repeats_and_impact(tmp_path):
+    from fabtriage import impact
+
+    out = evaluate.run_repeats("playbook", "holdout", tmp_path, 2)
+    assert out["repeats"] == 2 and out["mean_std"]["decision_accuracy"]["std"] == 0.0
+    assert (tmp_path / "repeats" / "r2" / "playbook").exists()
+    evaluate.run_split("always_hold", "holdout", tmp_path)
+    t = impact.table(tmp_path, "holdout")
+    assert t["methods"]["always_hold"]["engineer_hours"] == 250.0
+    assert t["methods"]["playbook"]["engineer_hours"] < 250.0
