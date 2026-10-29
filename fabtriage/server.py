@@ -20,7 +20,7 @@ from .client import has_key, make_client
 
 WEB = Path(__file__).parent / "web"
 RUNS = Path("runs")
-METHODS = ["agent", "playbook", "always_hold"]
+METHODS = ["agent", "playbook", "always_hold", "agent_noverify", "oneshot", "agent_baseten"]
 _live: dict = {}  # case_id -> thread
 _lock = threading.Lock()
 
@@ -43,7 +43,7 @@ def _read_run(method: str, case_id: str) -> dict | None:
 
 def cases() -> list:
     out = []
-    for split in ("dev", "holdout"):
+    for split in ("dev", "holdout", "holdout2"):
         for cid in sim.benchmark(split):
             case = sim.load(cid)
             runs = {}
@@ -104,20 +104,27 @@ def wafer_png(case_id: str, lot_id: str) -> bytes | None:
 
 def benchmark() -> dict:
     out = {}
-    for split in ("dev", "holdout"):
+    for split in ("dev", "holdout", "holdout2"):
         out[split] = {}
         for m in METHODS:
             path = RUNS / f"results_{m}_{split}.json"
             if path.exists():
                 data = json.loads(path.read_text())
                 out[split][m] = {"summary": data["summary"], "rows": data["rows"]}
+            rep = RUNS / f"results_{m}_{split}_repeats.json"
+            if rep.exists() and m in out[split]:
+                r = json.loads(rep.read_text())
+                out[split][m]["repeats"] = {k: r[k] for k in ("repeats", "mean_std", "cases_always_right", "cases_sometimes_wrong")}
+        from .impact import table
+
+        out[split + "_impact"] = table(RUNS, split)
     return out
 
 
 def start_live(case_id: str, engineer_note: str | None = None) -> dict:
     if not has_key("meta"):
         return {"error": "MODEL_API_KEY is not set in .env, so live runs are off. Recorded runs still work."}
-    if case_id in sim.benchmark("holdout"):
+    if case_id in sim.benchmark("holdout") + sim.benchmark("holdout2"):
         return {"error": "This alarm is held out for the final benchmark. Use a development alarm for live runs."}
     with _lock:
         if case_id in _live:
@@ -196,7 +203,12 @@ class Handler(BaseHTTPRequestHandler):
             if url.path == "/api/cases":
                 return self._json({"cases": cases(), "live_enabled": has_key("meta")})
             if url.path == "/api/run":
-                return self._json({"run": _read_run(q["method"], q["case"]), "live": q["case"] in _live})
+                from .sources import SOURCES
+
+                scenario = q["case"].rsplit("-", 1)[0]
+                return self._json(
+                    {"run": _read_run(q["method"], q["case"]), "live": q["case"] in _live, "sources": SOURCES.get(scenario)}
+                )
             if url.path == "/api/context":
                 return self._json(context(q["case"]))
             if url.path == "/api/benchmark":
@@ -218,11 +230,18 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         url = urlparse(self.path)
         length = int(self.headers.get("Content-Length") or 0)
+        if length > 32 * 1024 * 1024:
+            return self._json({"error": "recording too large"}, 413)
+        raw = self.rfile.read(length)
         try:
-            body = json.loads(self.rfile.read(length) or b"{}")
+            body = json.loads(raw or b"{}") if url.path != "/api/transcribe" else {}
             if url.path == "/api/live":
                 sim.load(body["case"])
                 return self._json(start_live(body["case"], body.get("engineer_note")))
+            if url.path == "/api/transcribe":
+                from .voice import transcribe
+
+                return self._json(transcribe(raw))
             if url.path == "/api/signoff":
                 return self._json(signoff(body["method"], body["case"], body["decision"], body.get("note", "")))
             self._json({"error": "not found"}, 404)

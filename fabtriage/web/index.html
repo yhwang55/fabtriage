@@ -143,6 +143,7 @@ details.raw pre { font-size: 12px; background: var(--paper); padding: 8px; borde
 .summary { margin-top: 10px; max-width: 70ch; }
 .signoff { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line); }
 .signoff textarea { width: 100%; max-width: 560px; min-height: 64px; border: 1px solid var(--line); border-radius: 5px; padding: 8px; background: var(--panel); display: block; margin: 8px 0; }
+.soft { color: var(--muted); }
 .signoff .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .stamp { display: inline-block; font: 700 16px var(--head); padding: 2px 10px; border: 2px solid; border-radius: 4px; transform: rotate(-2deg); }
 .stamp.approve { color: var(--release); }
@@ -160,6 +161,8 @@ details.raw pre { font-size: 12px; background: var(--paper); padding: 8px; borde
 .costs { display: grid; grid-template-columns: 1fr auto; row-gap: 2px; }
 .costs span:nth-child(odd) { color: var(--muted); }
 .truth { background: var(--paper); border-radius: 6px; padding: 10px 12px; }
+.refs { margin: 6px 0 0; padding-left: 16px; font-size: 13px; color: var(--muted); }
+.refs a { color: var(--slate); }
 svg text { font: 11px var(--body); fill: var(--muted); }
 
 /* ---------- benchmark ---------- */
@@ -225,6 +228,10 @@ const ACTIONS = {
   escalate_upstream: "Escalate upstream", hold_metrology_tool: "Hold metrology tool", flag_sensor: "Flag sensor",
 };
 const METHOD_NAMES = { agent: "Agent", playbook: "Fixed playbook", always_hold: "Always hold" };
+const BENCH_NAMES = {
+  agent: "Agent (Muse Spark 1.3)", agent_baseten: "Agent (Muse Spark Open)", agent_noverify: "Agent without verifier",
+  oneshot: "Same model, one shot, no tools", playbook: "Fixed playbook", always_hold: "Always hold",
+};
 
 const state = { cases: [], liveEnabled: false, caseId: null, method: "agent", run: null, ctx: null, showTruth: false, poll: null };
 const $ = (s, el = document) => el.querySelector(s);
@@ -245,7 +252,7 @@ async function loadCases() {
   renderList();
 }
 function renderList() {
-  const groups = { dev: "Development alarms", holdout: "Held-out alarms" };
+  const groups = { dev: "Development alarms", holdout: "Held-out alarms", holdout2: "Fresh held-out alarms" };
   let html = "";
   for (const [split, label] of Object.entries(groups)) {
     html += `<div class="group">${label}</div>`;
@@ -275,6 +282,7 @@ async function selectCase(id) {
 async function loadRun() {
   const data = await api(`/api/run?method=${state.method}&case=${state.caseId}`);
   state.run = data.run;
+  state.sources = data.sources;
   renderTraveler(data.live);
   renderSide();
   clearTimeout(state.poll);
@@ -341,7 +349,7 @@ function renderTraveler(live) {
   const a = c.alarm, L = state.ctx.limits, run = state.run;
   const reading = a.type === "FDC" ? `${fmt(a.value, 1)}<small>°C</small>` : `${fmt(a.value)}<small>Å</small>`;
   const methodBtns = Object.entries(METHOD_NAMES).map(([m, n]) => `<button aria-pressed="${m === state.method}" data-m="${m}">${n}</button>`).join("");
-  const heldOut = c.split === "holdout";
+  const heldOut = c.split !== "dev";
   const canRun = state.method === "agent" && state.liveEnabled && !live && !heldOut;
   let html = `<div class="alarm-head">
       <div><h1>${esc(a.chamber)}, ${esc(a.lot_id)}</h1>
@@ -414,7 +422,8 @@ function signoffBlock(run) {
   const reject = state.method === "agent" ? "Reject and send back" : "Reject";
   return `<div class="signoff"><b>Engineer sign-off</b>
     <textarea id="signnote" placeholder="Note for the record. If you reject, the agent gets this note and investigates again."></textarea>
-    <div class="row"><button class="btn approve" id="approve">Approve</button><button class="btn reject" id="reject">${reject}</button></div></div>`;
+    <div class="row"><button class="btn ghost" id="mic" aria-pressed="false">Speak a note</button><span class="soft" id="micstate"></span></div>
+    <div class="row" style="margin-top:8px"><button class="btn approve" id="approve">Approve</button><button class="btn reject" id="reject">${reject}</button></div></div>`;
 }
 
 function bindTraveler() {
@@ -440,9 +449,58 @@ function bindTraveler() {
     if (r.rerun && r.rerun.error) alertBar(r.rerun.error);
     await loadCases(); loadRun();
   };
+  const mic = $("#mic");
+  if (mic) mic.onclick = () => (recorder ? stopRecording() : startRecording());
   if (ap) ap.onclick = () => send("approve");
   if (rj) rj.onclick = () => send("reject");
 }
+/* ---------------- voice notes (Muse Voice Transcribe) ---------------- */
+let recorder = null;
+async function startRecording() {
+  let stream;
+  try { stream = await navigator.mediaDevices.getUserMedia({ audio: { channelCount: 1, echoCancellation: true } }); }
+  catch (e) { $("#micstate").textContent = "Microphone access was blocked. Allow it in the browser and try again."; return; }
+  const ctx = new AudioContext();
+  const src = ctx.createMediaStreamSource(stream);
+  const proc = ctx.createScriptProcessor(4096, 1, 1);
+  const chunks = [];
+  proc.onaudioprocess = (ev) => chunks.push(new Float32Array(ev.inputBuffer.getChannelData(0)));
+  src.connect(proc); proc.connect(ctx.destination);
+  recorder = { ctx, stream, proc, src, chunks, rate: ctx.sampleRate };
+  $("#mic").textContent = "Stop and transcribe"; $("#mic").setAttribute("aria-pressed", "true");
+  $("#micstate").textContent = "Listening…";
+}
+async function stopRecording() {
+  const r = recorder; recorder = null;
+  r.proc.disconnect(); r.src.disconnect(); r.stream.getTracks().forEach((t) => t.stop()); await r.ctx.close();
+  $("#mic").textContent = "Speak a note"; $("#mic").setAttribute("aria-pressed", "false");
+  $("#micstate").textContent = "Transcribing with Muse Voice Transcribe…";
+  const wav = toWav(r.chunks, r.rate, 16000);
+  const res = await fetch("/api/transcribe", { method: "POST", headers: { "Content-Type": "audio/wav" }, body: wav }).then((x) => x.json());
+  if (res.error) { $("#micstate").textContent = res.error; return; }
+  const box = $("#signnote");
+  box.value = (box.value.trim() ? box.value.trim() + " " : "") + res.text;
+  $("#micstate").textContent = "Transcribed by " + res.model + ". Edit if needed.";
+}
+function toWav(chunks, inRate, outRate) {
+  const total = chunks.reduce((n, c) => n + c.length, 0), input = new Float32Array(total);
+  let o = 0; for (const c of chunks) { input.set(c, o); o += c.length; }
+  const ratio = inRate / outRate, n = Math.floor(total / ratio), pcm = new Int16Array(n);
+  for (let i = 0; i < n; i++) {
+    const a = Math.floor(i * ratio), b = Math.min(Math.floor((i + 1) * ratio), total);
+    let s = 0; for (let j = a; j < b; j++) s += input[j];
+    const v = Math.max(-1, Math.min(1, s / Math.max(1, b - a)));
+    pcm[i] = v < 0 ? v * 0x8000 : v * 0x7fff;
+  }
+  const buf = new ArrayBuffer(44 + pcm.length * 2), d = new DataView(buf);
+  const w = (off, str) => { for (let i = 0; i < str.length; i++) d.setUint8(off + i, str.charCodeAt(i)); };
+  w(0, "RIFF"); d.setUint32(4, 36 + pcm.length * 2, true); w(8, "WAVE"); w(12, "fmt ");
+  d.setUint32(16, 16, true); d.setUint16(20, 1, true); d.setUint16(22, 1, true); d.setUint32(24, outRate, true);
+  d.setUint32(28, outRate * 2, true); d.setUint16(32, 2, true); d.setUint16(34, 16, true); w(36, "data"); d.setUint32(40, pcm.length * 2, true);
+  new Int16Array(buf, 44).set(pcm);
+  return new Blob([buf], { type: "audio/wav" });
+}
+
 function alertBar(msg) {
   const p = document.createElement("p"); p.className = "empty"; p.textContent = msg;
   $("#traveler").prepend(p); setTimeout(() => p.remove(), 6000);
@@ -507,7 +565,9 @@ function renderSide() {
       html += `<section><h2>Ground truth</h2>${state.showTruth
         ? `<div class="truth"><b>${esc(CAUSES[run.truth.cause])}.</b> ${esc(run.truth.explanation)}
             ${run.truth.confounder ? `<div class="cap">Planted distraction: ${esc(run.truth.confounder)}.</div>` : ""}
-            ${sc.decision_correct !== undefined ? `<p>${sc.decision_correct ? "The decision matches." : "The decision does not match."}</p>` : ""}</div>`
+            ${sc.decision_correct !== undefined ? `<p>${sc.decision_correct ? "The decision matches." : "The decision does not match."}</p>` : ""}
+            ${state.sources ? `<div class="cap"><b>Why this scenario is realistic.</b> ${esc(state.sources.practitioner)}</div>
+              <ul class="refs">${state.sources.public.map(([t, u, why]) => `<li><a href="${esc(u)}" target="_blank" rel="noopener">${esc(t)}</a>: ${esc(why)}</li>`).join("")}</ul>` : ""}</div>`
         : `<button class="btn ghost" id="reveal">Show what really happened</button><div class="cap">Hidden from the agent and the tools. Only for review.</div>`}</section>`;
     }
   }
@@ -519,17 +579,32 @@ function renderSide() {
 /* ---------------- benchmark ---------------- */
 async function renderBench() {
   const data = await api("/api/benchmark");
-  const keys = [["decision_accuracy", "Right decision", (v) => Math.round(v * 100) + "%"], ["missed_faults", "Missed real faults"], ["needless_holds", "Needless holds"], ["avg_tool_calls", "Tool calls"], ["avg_measurements", "Measurements"], ["avg_lot_delay_h", "Lot delay, h"]];
-  let html = `<h1>Benchmark</h1><p class="lead">Every method investigates the same simulated alarms through the same tools and the same verifier. The development set was used while building the agent; the held-out set was run once at the end.</p>`;
-  for (const [split, title] of [["holdout", "Held-out alarms"], ["dev", "Development alarms"]]) {
-    const ms = Object.keys(data[split] || {});
+  const keys = [["decision_accuracy", "Right decision", (v) => Math.round(v * 100) + "%"], ["missed_faults", "Missed real faults"], ["needless_holds", "Needless holds"], ["ungrounded_cases", "Unsupported claims", (v) => v ?? 0], ["rule_broken_cases", "Safety rule broken", (v) => v ?? 0], ["avg_tool_calls", "Tool calls"], ["avg_measurements", "Measurements"], ["avg_lot_delay_h", "Lot delay, h"]];
+  let html = `<h1>Benchmark</h1><p class="lead">Every method investigates the same simulated alarms through the same tools and the same verifier. The development set was used while building the agent. The held-out set was run once; after reading its one failure we added a single line of process knowledge and checked that version on a fresh held-out set nobody had seen.</p>`;
+  for (const [split, title] of [["holdout2", "Fresh held-out alarms (after the fix)"], ["holdout", "Held-out alarms"], ["dev", "Development alarms"]]) {
+    const ms = Object.keys(data[split] || {}).filter((m) => ["agent", "playbook"].includes(m));
     if (!ms.length) { html += `<h2>${title}</h2><p class="lead">Not run yet.</p>`; continue; }
     html += `<h2>${title} (${data[split][ms[0]].summary.n})</h2><table class="sum"><tr><th>Method</th>${keys.map((k) => `<th>${k[1]}</th>`).join("")}</tr>`;
-    for (const m of ["agent", "playbook", "always_hold"].filter((m) => data[split][m])) {
-      const s = data[split][m].summary;
-      html += `<tr class="${m}"><td>${METHOD_NAMES[m]}</td>${keys.map(([k, , f], i) => `<td>${i === 0 ? `<span class="bar" style="width:${s[k] * 80}px"></span>` : ""}${f ? f(s[k]) : s[k]}</td>`).join("")}</tr>`;
+    for (const m of Object.keys(BENCH_NAMES).filter((m) => data[split][m])) {
+      const s = data[split][m].summary, rep = data[split][m].repeats;
+      const cell = (k, f, i) => {
+        if (rep && rep.mean_std[k] && i === 0) {
+          const ms = rep.mean_std[k];
+          return `<span class="bar" style="width:${ms.mean * 80}px"></span>${(ms.mean * 100).toFixed(1)}% ± ${(ms.std * 100).toFixed(1)}`;
+        }
+        if (rep && rep.mean_std[k]) return `${rep.mean_std[k].mean}`;
+        return `${i === 0 ? `<span class="bar" style="width:${s[k] * 80}px"></span>` : ""}${f ? f(s[k]) : s[k]}`;
+      };
+      html += `<tr class="${m}"><td>${BENCH_NAMES[m]}${rep ? `<div class="soft" style="font-size:12px">mean of ${rep.repeats} runs</div>` : ""}</td>${keys.map(([k, , f], i) => `<td>${cell(k, f, i)}</td>`).join("")}</tr>`;
     }
     html += `</table>`;
+    const imp = data[split + "_impact"];
+    if (imp && Object.keys(imp.methods).length) {
+      const cols = [["engineer_hours", "Engineer hours"], ["needless_holds", "Needless holds"], ["lot_hours_from_measurements", "Lot-hours waiting on measurements"], ["missed_faults", "Missed faults"], ["lots_at_risk", "Lots at risk"]];
+      html += `<h2>Per 100 alarms, under stated assumptions</h2><table class="sum"><tr><th>Method</th>${cols.map((c) => `<th>${c[1]}</th>`).join("")}</tr>`;
+      for (const m of Object.keys(BENCH_NAMES).filter((m) => imp.methods[m])) html += `<tr class="${m}"><td>${BENCH_NAMES[m]}</td>${cols.map(([k]) => `<td>${imp.methods[m][k]}</td>`).join("")}</tr>`;
+      html += `</table><ul class="legend">${Object.values(imp.assumptions).map((a) => `<li>${a.value}: ${esc(a.why)}</li>`).join("")}</ul>`;
+    }
     const byCase = {};
     for (const m of ms) for (const r of data[split][m].rows) (byCase[r.case_id] ||= {})[m] = r.decision_correct;
     const order = data[split][ms.reduce((a, b) => (data[split][a].rows.length >= data[split][b].rows.length ? a : b))].rows.map((r) => r.case_id);
