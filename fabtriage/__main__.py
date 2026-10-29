@@ -50,6 +50,8 @@ def main(argv=None) -> None:
     rs.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "all"])
     im = sub.add_parser("impact", help="per-100-alarm impact under stated assumptions")
     im.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "all"])
+    ex = sub.add_parser("export", help="write the console as a static read-only site")
+    ex.add_argument("--out", default="docs/demo")
     sv = sub.add_parser("serve")
     sv.add_argument("--port", type=int, default=8770)
     cmp_ = sub.add_parser("compare")
@@ -88,6 +90,10 @@ def main(argv=None) -> None:
         print("per 100 alarms".ljust(18) + "".join(c[:16].rjust(18) for c in cols))
         for method, row in t["methods"].items():
             print(method.ljust(18) + "".join(str(row[c]).rjust(18) for c in cols))
+    elif args.cmd == "export":
+        from .export import export
+
+        print(json.dumps(export(Path(args.out)), indent=2))
     elif args.cmd == "serve":
         from .server import serve
 

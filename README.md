@@ -2,6 +2,8 @@
 
 **An agent that investigates semiconductor fab alarms and proposes what to do about them, with every claim checked against the evidence before an engineer signs off.**
 
+**Live demo (read-only, built from saved runs): https://yhwang55.github.io/fabtriage/**
+
 Built during the Meta Global AI Developer Hackathon (Oct 26 to Nov 4, 2026). Everything in this repository was written during the event.
 
 ## The problem
@@ -87,7 +89,7 @@ Development set (28 cases): agent 100%, fixed playbook 86% (2 missed faults), al
 
 ### What the comparisons show
 
-- **Investigating beats answering.** The same model given a fixed evidence pack and one shot at the answer was right 71% and 93% of the time on the two held-out sets, and four times released an out-of-spec lot without a confirming re-measurement. The agent asks for a re-measurement when the answer depends on it.
+- **Investigating beats answering.** The same model given a fixed evidence pack and one shot at the answer was right 71% and 93% of the time on the two held-out sets, and broke a playbook rule in 4 of those 28 cases (on the development set, it released out-of-spec lots without a confirming re-measurement five times). The agent asks for a re-measurement when the answer depends on it.
 - **The verifier keeps evidence complete; it did not change accuracy here.** Without it the agent made the same decisions, but 1 of 14 and 4 of 14 dispositions would have reached the engineer missing evidence the playbook requires (for example, holding a chamber without citing a comparison to the other chambers). Muse Spark never cited a number that was not in its tool output.
 - **Open weights work too.** Muse Spark Open on Baseten matched the accuracy on the fresh set but used about 40% more tool calls and re-measurements.
 - **The cost.** The agent does slightly more re-measuring than the playbook on the fresh set (1.18 vs 1.07 lot-hours per alarm) in exchange for zero missed faults instead of three.
@@ -126,13 +128,22 @@ python -m fabtriage compare --split dev
 
 Each run writes `runs/<method>/<case>/run.json` with the full trace, refusals, costs and the score.
 
+## Demo site
+
+`python -m fabtriage export --out docs/demo` writes the console as a static, read-only site from the saved runs; GitHub Pages serves it from `docs/`. It has the alarm queue, every investigation with a step-by-step replay, the side-by-side comparison and the benchmark. Live investigations, sign-off and voice notes need an API key, so they run in the local version:
+
+```bash
+cp .env.example .env    # add your MODEL_API_KEY
+python -m fabtriage serve
+```
+
 ## Console
 
 ```bash
 python -m fabtriage serve     # http://127.0.0.1:8770
 ```
 
-Pick an alarm and watch the investigation step by step: each tool call with its evidence id, the agent's reasoning, verifier refusals, the final disposition with every claim linked back to its evidence, the chamber's SPC chart and the SAM-segmented wafer maps. An engineer approves the disposition, or rejects it with a note and the agent investigates again with that note. The note can be spoken: the console records it and Muse Voice Transcribe turns it into text, because typing in cleanroom gloves is slow. The Benchmark tab compares the agent with the baselines.
+The first screen is the alarm queue: what needs an engineer, then proposed holds, then proposed releases. Open an alarm to see the verdict card (decision, cause, the evidence behind it, sign-off) and, below it, the investigation step by step: each tool call with its evidence id, the agent's reasoning, verifier refusals, the final disposition with every claim linked back to its evidence, the chamber's SPC chart and the SAM-segmented wafer maps. An engineer approves the disposition, or rejects it with a note and the agent investigates again with that note. The note can be spoken: the console records it and Muse Voice Transcribe turns it into text, because typing in cleanroom gloves is slow. The Benchmark tab compares the agent with the baselines.
 
 ## Scope note
 

@@ -50,11 +50,15 @@ def cases() -> list:
             for m in METHODS:
                 run = _read_run(m, cid)
                 if run:
+                    d = run.get("disposition") or {}
                     runs[m] = {
                         "status": run.get("status"),
                         "correct": (run.get("score") or {}).get("decision_correct"),
                         "signoff": (run.get("signoff") or {}).get("decision"),
                         "live": bool(run.get("live")) or cid in _live,
+                        "cause": d.get("cause"),
+                        "actions": [a.get("type") for a in d.get("actions") or [] if isinstance(a, dict)],
+                        "measurements": (run.get("costs") or {}).get("measurements"),
                     }
             out.append({"case_id": cid, "split": split, "alarm": case.alarm, "runs": runs})
     return out
