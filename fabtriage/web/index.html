@@ -229,6 +229,8 @@ const METHOD_NAMES = { agent: "Agent", playbook: "Fixed playbook", always_hold: 
 const state = { cases: [], liveEnabled: false, caseId: null, method: "agent", run: null, ctx: null, showTruth: false, poll: null };
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const PATTERNS = { none: "no thick region", center: "center-thick", edge_ring: "edge ring", edge_arc: "edge arc", local_spot: "local spot", multiple: "several thick regions", most_of_wafer: "thick over most of the wafer", wafer_wide: "wafer-wide region" };
+const pattern = (p) => PATTERNS[p] || esc(String(p).replace(/_/g, " "));
 const fmt = (v, d = 2) => (typeof v === "number" ? v.toFixed(d) : esc(v));
 async function api(path, body) {
   const r = await fetch(path, body ? { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) } : {});
@@ -328,7 +330,7 @@ function finding(s) {
     }
     case "get_pm_log": return `${r.events.length} PM events${a.chamber ? " on " + esc(a.chamber) : ""}; latest at ${r.events.length ? r.events[r.events.length - 1].time_h + " h" : "none"}.`;
     case "request_measurement": return `${esc(r.lot_id)} on ${esc(r.met_tool)}: <b>${fmt(r.mean_A)} Å</b>, ${r.in_spec ? "in spec" : "out of spec"}. Adds ${r.lot_delay_added_h} h of lot delay.`;
-    case "get_wafer_map": return `${esc(r.lot_id)}: ${esc((r.pattern || "").replace("_", " "))} pattern, segmented by ${esc(r.segmenter)}.`;
+    case "get_wafer_map": return `${esc(r.lot_id)}: ${pattern(r.pattern)}, segmented by ${esc(r.segmenter)}.`;
     default: return "";
   }
 }
@@ -485,7 +487,7 @@ function renderSide() {
   if (ctx.alarm.type !== "FDC") maps.push({ src: `/api/wafer.png?case=${state.caseId}&lot=${ctx.alarm.lot_id}`, cap: `${ctx.alarm.lot_id}, as measured at the alarm` });
   for (const s of (run && run.trace) || []) {
     if (s.tool === "get_wafer_map" && s.result && s.result.image) {
-      maps.push({ src: `/runs/${state.method}/${state.caseId}/${s.result.image}`, cap: `${s.result.lot_id}, ${String(s.result.pattern).replace("_", " ")} (${s.result.segmenter})` });
+      maps.push({ src: `/runs/${state.method}/${state.caseId}/${s.result.image}`, cap: `${s.result.lot_id}, ${pattern(s.result.pattern)} (${s.result.segmenter})` });
     }
   }
   if (maps.length) html += `<section><h2>Wafer maps</h2><div class="maps">${maps.map((m) => `<figure><img src="${m.src}" alt="Thickness map, red where thicker than the wafer's own mean"><figcaption>${esc(m.cap)}</figcaption></figure>`).join("")}</div>

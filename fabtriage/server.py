@@ -117,6 +117,8 @@ def benchmark() -> dict:
 def start_live(case_id: str, engineer_note: str | None = None) -> dict:
     if not has_key("meta"):
         return {"error": "MODEL_API_KEY is not set in .env, so live runs are off. Recorded runs still work."}
+    if case_id in sim.benchmark("holdout"):
+        return {"error": "This alarm is held out for the final benchmark. Use a development alarm for live runs."}
     with _lock:
         if case_id in _live:
             return {"error": "an investigation is already running for this alarm"}
