@@ -123,7 +123,12 @@ Whatever happens is reported per scenario.
 
 ### Result of the clue-removal check
 
-All three criteria met in all three conditions (one run each, seeds 7 and 8):
+All three criteria met in all three conditions. First run once each (table below); later
+repeated to three runs each as part of the large evaluation, with the same outcome: off-target
+lots per run 8.7 (earlier PMs hidden), 9.0 (PM details hidden) and 9.7 (both), against 21 for
+the two-monitor rule; no out-of-spec lots; 1.93, 2.37 and 2.27 monitor wafers per recovery.
+
+First single runs (seeds 7 and 8):
 
 | Condition | Off-target lots | Out-of-spec | Monitor wafers per recovery |
 | --- | --- | --- | --- |

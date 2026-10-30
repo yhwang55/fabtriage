@@ -68,7 +68,7 @@ def wilson(k: float, n: int, z: float = 1.96) -> tuple:
 
 
 def _fmt(v, pct=False):
-    return round(v * 100, 1) if pct else round(v, 2)
+    return round(float(v) * 100, 1) if pct else round(float(v), 2)
 
 
 def diagnosis(runs_dir: Path, split: str) -> dict:
@@ -85,8 +85,10 @@ def diagnosis(runs_dir: Path, split: str) -> dict:
             continue
         miss = per_case(reps, ids, lambda r: r["missed_fault"])
         need = per_case(reps, ids, lambda r: r["needless_hold"])
-        lo, hi = boot_ci(a)
         always = int(np.sum(a == 1.0))
+        lo, hi = boot_ci(a)
+        if a.min() == a.max():  # a bootstrap of identical values has zero width; fall back to Wilson on cases
+            lo, hi = wilson(always, len(a))
         out["methods"][m] = {
             "repeats": len(reps),
             "decision_accuracy_pct": _fmt(a.mean(), True),

@@ -42,3 +42,29 @@ Every number is reported whether or not it meets these, with the cases the agent
 Fixed methods, already run when this was written: playbook 78.6% right decisions
 [68.6, 87.1], 8 missed faults; always-hold 42.9%; two-monitor rule 1.86 off-target lots per
 recovery [1.22, 2.58] and no out-of-spec lots.
+
+## Results (added after the run, Oct 30)
+
+All six criteria met.
+
+1. Right decisions: agent 100% (70 of 70 in every run), playbook 78.6%. Paired difference
+   21.4 points, 95% interval 12.9 to 31.4. Met.
+2. Missed real faults per run: agent 0, playbook 8. Met.
+3. Lower end of the agent's 95% interval: 94.8% (Wilson interval on 70 cases; the bootstrap
+   has zero width when every case is right). Met.
+4. Off-target lots per recovery: agent 0.23 (0.08 to 0.42), two-monitor rule 1.86. Paired
+   difference -1.63, 95% interval -2.33 to -0.99. Met.
+5. Out-of-spec lots in any agent run: 0. Met.
+6. Monitor wafers per recovery: 1.66. Met.
+
+Also measured: the same model without tools got 94.3% (88.6 to 98.6), 5.7 points below the
+agent (1.4 to 11.4). Without the verifier the agent's decisions were all right too, but 19 of
+70 dispositions broke a playbook rule that the verifier would have refused. The agent's 35
+off-target recovery lots over three runs: 30 from `metrology_bias` (the production-feedback
+limit described in RECOVERY.md) and 5 from `seasoning`.
+
+The clue-removal check, repeated to three runs per condition, met its criteria in every
+condition (see RECOVERY.md).
+
+Token use: about 3.7 million tokens per full diagnosis run (53 thousand per alarm) and 35
+thousand per recovery.

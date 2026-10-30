@@ -60,6 +60,39 @@ Every method runs on the same alarms, through the same tools and the same verifi
 
 **How the evaluation went.** The development set (28 cases) was used while building the agent. The first held-out set (seeds 5 and 6, 14 cases) was run once. We read its one failure, added one line of process knowledge to the agent, and checked that version on a second held-out set (seeds 7 and 8, 14 cases) that nobody had looked at. The agent runs three times on each held-out set to show run-to-run spread.
 
+### Large held-out set (70 alarms, 50 recoveries)
+
+The small sets above are too small to say much on their own, so the final check is a larger
+held-out set nobody had looked at: 10 new seeds of every scenario. The analysis plan and six
+pass/fail criteria were committed before the run ([docs/LARGE_EVAL.md](docs/LARGE_EVAL.md)).
+Each case counts once; 95% intervals come from a bootstrap over cases, and comparisons are
+paired on the same cases. All six criteria were met.
+
+| Diagnosis, 70 alarms | Right decision | 95% interval | Missed real faults | Needless holds |
+| --- | --- | --- | --- | --- |
+| **Agent, Muse Spark 1.3 (3 runs)** | **100%** | 94.8 to 100 | **0** | **0** |
+| Agent without the verifier (1 run) | 100% | 94.8 to 100 | 0 | 0 |
+| Same model, one shot, no tools (1 run) | 94.3% | 88.6 to 98.6 | 1 | 3 |
+| Fixed playbook | 78.6% | 68.6 to 87.1 | 8 | 7 |
+| Always hold | 42.9% | 31.4 to 54.3 | 0 | 40 |
+
+The agent got all 70 alarms right in all three runs. Against the fixed playbook on the same
+alarms it is 21.4 points better (95% interval 12.9 to 31.4); against the same model without
+tools, 5.7 points (1.4 to 11.4). Without the verifier the decisions were just as good, but 19
+of 70 dispositions broke a playbook rule (for example, releasing an out-of-spec lot without
+a re-measurement); with it, none did.
+
+| Recovery, 50 recoveries | Off-target lots per recovery | 95% interval | Out-of-spec lots | Monitor wafers |
+| --- | --- | --- | --- | --- |
+| **Agent, Muse Spark 1.3 (3 runs)** | **0.23** | 0.08 to 0.42 | **0** | 1.66 |
+| Two monitor wafers (guide rule) | 1.86 | 1.22 to 2.58 | 0 | 2.0 |
+| Back to the baseline recipe | 2.56 | 1.78 to 3.40 | 16 | 0 |
+| Keep the pre-PM recipe | 4.90 | 3.86 to 5.94 | 59 | 0 |
+
+The agent has 1.63 fewer off-target lots per recovery than the best guide rule (95%
+interval 0.99 to 2.33). Of its remaining off-target lots, 30 of 35 come from the metrology
+offset case described below.
+
 ### Fresh held-out set, after the fix (14 cases)
 
 | method | right decision | missed real faults | needless holds | tool calls | re-measures | lot delay (h) |
@@ -108,7 +141,7 @@ Assumptions, from `python -m fabtriage impact`: a manual investigation of a held
 ### Limits
 
 - The fab is simulated and small: one deposition step, four chambers, seven fault types. Real fabs have more tools, more steps and faults no list anticipates.
-- Fourteen cases per held-out set is small; one wrong case moves accuracy by 7 points.
+- The two small held-out sets have 14 cases each; the large set (70 alarms, 50 recoveries) is what the intervals above rest on. A 100% result on 70 cases still only bounds the error rate below about 5%.
 - The scenarios follow public sources and practitioner input ([docs/SCENARIOS.md](docs/SCENARIOS.md)), but the simulator is not calibrated to production data.
 
 ## Recovery after PM
