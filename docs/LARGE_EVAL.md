@@ -59,7 +59,9 @@ All six criteria met.
 
 Also measured: the same model without tools got 94.3% (88.6 to 98.6), 5.7 points below the
 agent (1.4 to 11.4). Without the verifier the agent's decisions were all right too, but 19 of
-70 dispositions broke a playbook rule that the verifier would have refused. The agent's 35
+70 dispositions did not cite the evidence the playbook requires (13 chamber holds without a
+cited chamber comparison, 3 upstream escalations without a commonality test, 3 one-off-wafer
+releases without the chamber's history); the verifier would have sent each back. The agent's 35
 off-target recovery lots over three runs: 30 from `metrology_bias` (the production-feedback
 limit described in RECOVERY.md) and 5 from `seasoning`.
 

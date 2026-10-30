@@ -70,6 +70,38 @@ def rec_chart(W=360, H=180):
     s.append("</svg>")
     return "".join(s)
 
+def verifier_cards():
+    """What the verifier would have refused: the agent run with the verifier off, on the large set."""
+    groups = {}
+    for key, _ in SCEN:
+        for seed in range(9, 19):
+            path = ROOT / "runs" / "agent_noverify" / f"{key}-{seed}" / "run.json"
+            if not path.exists():
+                continue
+            r = json.loads(path.read_text())
+            for p in r.get("posthoc_problems", []):
+                if not p.startswith("rule:"):
+                    continue
+                rule = p.split(":", 1)[1].strip()
+                g = groups.setdefault(rule, {"n": 0, "case": f"{key}-{seed}", "summary": r["disposition"]["summary"]})
+                g["n"] += 1
+    return sorted(groups.items(), key=lambda kv: -kv[1]["n"])
+
+
+RULE_TEXT = {
+    "chamber": ("Held a chamber without citing a comparison", "Before holding a chamber, the playbook wants evidence that it differs from the others: a side-by-side summary or a commonality test, cited in the disposition."),
+    "upstream": ("Escalated to the clean step without the test", "Escalating to the clean step needs the test that shows lots from one clean tool differ, cited."),
+    "noise": ("Released a one-off wafer without the chamber's history", "Releasing a wafer as noise needs the chamber's trend or summary, cited, to show nothing else moved."),
+}
+
+
+def rule_text(rule):
+    for k, v in RULE_TEXT.items():
+        if f"cause '{k}'" in rule:
+            return v
+    return (rule, "")
+
+
 SCEN = [("pm_shift", "Chamber after PM"), ("buildup_drift", "Buildup drift"), ("metrology_error", "Metrology misread"), ("upstream_clean", "Upstream clean"), ("wafer_noise", "One-off wafer"), ("sensor_fault", "Sensor fault"), ("heater_drift", "Heater drift")]
 
 def matrix(W=1100):
@@ -160,6 +192,28 @@ steps = [
     ("Recovery", "The held chamber is brought back: two monitor wafers, a recipe 2.9% shorter, and 40 production lots inside the limits. Keeping the old recipe would have sent 11 of them off target."),
 ]
 
+def verifier_section():
+    cards = verifier_cards()
+    if not cards:
+        return ""
+    total = sum(g["n"] for _, g in cards)
+    out = [f'''<section style="display: flex; flex-direction: column; gap: 22px">
+<h2 style="{HD}; font-weight: 700; font-size: 40px; margin: 0">What the verifier catches</h2>
+<p style="margin: 0; font-size: 18px; line-height: 1.5; max-width: 66ch">With the verifier switched off, the agent still made the right call on all 70 alarms. But {total} of its 70 dispositions did not carry the evidence the playbook asks for, so an engineer could not check them at a glance. With the verifier on, those are sent back and the agent goes and gets the evidence: none slip through.</p>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 24px">''']
+    for rule, g in cards:
+        title, why = rule_text(rule)
+        first = g["summary"].split(". ")[0].rstrip(".") + "."
+        out.append(f'''<article style="background: {PANEL}; padding: 22px; display: flex; flex-direction: column; gap: 10px">
+<div style="{HD}; font-weight: 700; font-size: 40px; color: {HOLD}">{g["n"]}</div>
+<h3 style="{HD}; font-weight: 600; font-size: 22px; margin: 0">{title}</h3>
+<p style="margin: 0; font-size: 15px; line-height: 1.5">{why}</p>
+<p style="margin: 0; font-size: 14px; line-height: 1.5; color: {MUTED}">One of them ({dict(SCEN)[g["case"].rsplit("-", 1)[0]]}): &#8220;{first}&#8221; The conclusion was right; the evidence the playbook requires was not cited.</p>
+</article>''')
+    out.append("</div></section>")
+    return "".join(out)
+
+
 def main_page():
     out = [HEAD]
     out.append(f'''<div style="{BD}; color: {INK}; background: {PAPER}; min-height: 100%;">
@@ -192,10 +246,11 @@ def main_page():
 <div style="background: {PANEL}; padding: 24px; overflow-x: auto">{matrix()}</div>
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 28px">
 <div><div style="{HD}; font-weight: 700; font-size: 44px">100%</div><p style="margin: 4px 0 0; font-size: 16px; line-height: 1.45">right decisions, 95% interval 94.8 to 100. The fixed playbook: 78.6%.</p></div>
-<div><div style="{HD}; font-weight: 700; font-size: 44px">0 of 70</div><p style="margin: 4px 0 0; font-size: 16px; line-height: 1.45">dispositions broke a safety rule. Without the verifier, 19 did.</p></div>
+<div><div style="{HD}; font-weight: 700; font-size: 44px">0 of 70</div><p style="margin: 4px 0 0; font-size: 16px; line-height: 1.45">dispositions missing the evidence the playbook asks for. Without the verifier, 19.</p></div>
 <div><div style="{HD}; font-weight: 700; font-size: 44px">0.23</div><p style="margin: 4px 0 0; font-size: 16px; line-height: 1.45">off-target lots per recovery over 50 recoveries. The best guide rule: 1.86.</p></div>
 </div>
 </section>
+{verifier_section()}
 <section style="display: flex; flex-direction: column; gap: 22px">
 <h2 style="{HD}; font-weight: 700; font-size: 40px; margin: 0">Where it breaks</h2>
 <p style="margin: 0; font-size: 18px; line-height: 1.5; max-width: 66ch">Faults keep their size while the evidence gets weaker: noisier film, fewer measured lots, faults that began more recently. The agent holds up through level 2. At level 3 its lead is gone, but it fails safe: no missed faults, more needless holds.</p>

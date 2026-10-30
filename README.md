@@ -79,8 +79,10 @@ paired on the same cases. All six criteria were met.
 The agent got all 70 alarms right in all three runs. Against the fixed playbook on the same
 alarms it is 21.4 points better (95% interval 12.9 to 31.4); against the same model without
 tools, 5.7 points (1.4 to 11.4). Without the verifier the decisions were just as good, but 19
-of 70 dispositions broke a playbook rule (for example, releasing an out-of-spec lot without
-a re-measurement); with it, none did.
+of 70 dispositions did not cite the evidence the playbook requires (13 blamed the chamber
+without a cited chamber comparison, 3 blamed the clean step without a commonality test, 3
+called a wafer a one-off without the chamber's history). With the verifier on, those are sent
+back until the evidence is there; none got through.
 
 | Recovery, 50 recoveries | Off-target lots per recovery | 95% interval | Out-of-spec lots | Monitor wafers |
 | --- | --- | --- | --- | --- |
