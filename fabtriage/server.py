@@ -43,7 +43,7 @@ def _read_run(method: str, case_id: str) -> dict | None:
 
 def cases() -> list:
     out = []
-    for split in ("dev", "holdout", "holdout2"):
+    for split in ("dev", "holdout", "holdout2", "holdout3"):
         for cid in sim.benchmark(split):
             case = sim.load(cid)
             runs = {}
@@ -108,7 +108,7 @@ def wafer_png(case_id: str, lot_id: str) -> bytes | None:
 
 def benchmark() -> dict:
     out = {}
-    for split in ("dev", "holdout", "holdout2"):
+    for split in ("dev", "holdout", "holdout2", "holdout3"):
         out[split] = {}
         for m in METHODS:
             path = RUNS / f"results_{m}_{split}.json"
@@ -123,6 +123,11 @@ def benchmark() -> dict:
 
         out[split + "_impact"] = table(RUNS, split)
     out["recovery"] = recovery_benchmark()
+    out["report"] = {}
+    for split in ("holdout3",):
+        path = RUNS / f"report_{split}.json"
+        if path.exists():
+            out["report"][split] = json.loads(path.read_text())
     return out
 
 
@@ -134,7 +139,7 @@ def recovery_cases() -> list:
     from . import recovery as R
 
     out = []
-    for split in ("linked", "dev", "holdout", "holdout2"):
+    for split in ("linked", "dev", "holdout", "holdout2", "holdout3"):
         for cid in R.benchmark(split):
             c = R.load(cid)
             runs = {}
@@ -168,7 +173,7 @@ def recovery_benchmark() -> dict:
     from . import recovery_eval as RE
 
     out = {}
-    for split in ("dev", "holdout", "holdout2"):
+    for split in ("dev", "holdout", "holdout2", "holdout3"):
         res = RE.load_results(RUNS / "recovery", split)
         out[split] = {m: {"summary": d["summary"], "repeats": (d.get("repeats") or {}).get("mean_std")} for m, d in res.items()}
         out[split + "_criteria"] = RE.criteria(res)
@@ -178,7 +183,7 @@ def recovery_benchmark() -> dict:
 def start_live(case_id: str, engineer_note: str | None = None) -> dict:
     if not has_key("meta"):
         return {"error": "MODEL_API_KEY is not set in .env, so live runs are off. Recorded runs still work."}
-    if case_id in sim.benchmark("holdout") + sim.benchmark("holdout2"):
+    if case_id in sim.benchmark("holdout") + sim.benchmark("holdout2") + sim.benchmark("holdout3"):
         return {"error": "This alarm is held out for the final benchmark. Use a development alarm for live runs."}
     with _lock:
         if case_id in _live:

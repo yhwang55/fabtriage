@@ -463,7 +463,7 @@ async function loadCases() {
   if (!$("#shift").hidden) renderShift();
 }
 function renderList() {
-  const groups = KO() ? { dev: "개발 세트 알람", holdout: "평가 세트 알람", holdout2: "새 평가 세트 알람" } : { dev: "Development alarms", holdout: "Held-out alarms", holdout2: "Fresh held-out alarms" };
+  const groups = KO() ? { dev: "개발 세트 알람", holdout: "평가 세트 알람", holdout2: "새 평가 세트 알람", holdout3: "대규모 평가 세트 알람" } : { dev: "Development alarms", holdout: "Held-out alarms", holdout2: "Fresh held-out alarms", holdout3: "Large held-out alarms" };
   let html = "";
   for (const [split, label] of Object.entries(groups)) {
     html += `<div class="group">${label}</div>`;
@@ -742,7 +742,7 @@ function renderShift() {
     <p class="lead">Every alarm here was investigated by the agent. Start at the top: alarms that need you come first, then proposed holds, then proposed releases. Each alarm is its own simulated fab history.</p>
     <p class="counts"><b>${waiting}</b> waiting for your sign-off, <b>${holds}</b> of them proposing a hold. <b>${attn}</b> need an engineer, <b>${done}</b> approved.</p>`) + `
     <div class="filters"><label for="qsplit">${L("Alarm set", "알람 세트")}</label>
-      <select id="qsplit">${(KO() ? [["dev", "개발 세트"], ["holdout", "평가 세트"], ["holdout2", "새 평가 세트"], ["all", "전체"]] : [["dev", "Development"], ["holdout", "Held-out"], ["holdout2", "Fresh held-out"], ["all", "All"]]).map(([v, t]) => `<option value="${v}" ${v === split ? "selected" : ""}>${t}</option>`).join("")}</select></div>
+      <select id="qsplit">${(KO() ? [["dev", "개발 세트"], ["holdout", "평가 세트"], ["holdout2", "새 평가 세트"], ["holdout3", "대규모 평가 세트"], ["all", "전체"]] : [["dev", "Development"], ["holdout", "Held-out"], ["holdout2", "Fresh held-out"], ["holdout3", "Large held-out"], ["all", "All"]]).map(([v, t]) => `<option value="${v}" ${v === split ? "selected" : ""}>${t}</option>`).join("")}</select></div>
     <table class="queue"><tr><th>${L("Alarm", "알람")}</th><th>${term("Chamber", L("Chamber", "챔버"))}</th><th>${L("Reading", "측정값")}, ${term("Å")}</th><th>${L("Agent's call", "에이전트 판단")}</th><th class="opt">${L("Proposed actions", "제안 조치")}</th><th>${L("Status", "상태")}</th></tr>`;
   for (const c of rows) {
     const a = c.alarm, r = c.runs.agent;
@@ -1013,11 +1013,11 @@ async function renderBench() {
   let html = KO()
     ? `<h1>성능 비교</h1><p class="lead">모든 방법이 같은 가상 알람을 같은 도구와 같은 검증기로 조사합니다. 개발 세트는 에이전트를 만드는 동안 썼습니다. 평가 세트는 한 번만 돌렸고, 거기서 나온 실패 하나를 읽고 공정 지식 한 줄을 더한 뒤, 아무도 본 적 없는 새 평가 세트로 그 버전을 확인했습니다.</p>`
     : `<h1>Benchmark</h1><p class="lead">Every method investigates the same simulated alarms through the same tools and the same verifier. The development set was used while building the agent. The held-out set was run once; after reading its one failure we added a single line of process knowledge and checked that version on a fresh held-out set nobody had seen.</p>`;
-  const splits = KO() ? [["holdout2", "새 평가 세트 (수정 후)"], ["holdout", "평가 세트"], ["dev", "개발 세트"]] : [["holdout2", "Fresh held-out alarms (after the fix)"], ["holdout", "Held-out alarms"], ["dev", "Development alarms"]];
+  const splits = KO() ? [["holdout3", "대규모 평가 세트 (70건)"], ["holdout2", "새 평가 세트 (수정 후)"], ["holdout", "평가 세트"], ["dev", "개발 세트"]] : [["holdout3", "Large held-out set (70 alarms)"], ["holdout2", "Fresh held-out alarms (after the fix)"], ["holdout", "Held-out alarms"], ["dev", "Development alarms"]];
   for (const [split, title] of splits) {
     const ms = Object.keys(data[split] || {}).filter((m) => ["agent", "playbook"].includes(m));
     if (!ms.length) { html += `<h2>${title}</h2><p class="lead">${L("Not run yet.", "아직 돌리지 않았습니다.")}</p>`; continue; }
-    html += `<h2>${title} (${data[split][ms[0]].summary.n})</h2><table class="sum"><tr><th>${L("Method", "방법")}</th>${keys.map((k) => `<th>${k[1]}</th>`).join("")}</tr>`;
+    html += `<h2>${title} (${data[split][ms[0]].summary.n})</h2>${ciLine(data, split)}<table class="sum"><tr><th>${L("Method", "방법")}</th>${keys.map((k) => `<th>${k[1]}</th>`).join("")}</tr>`;
     for (const m of Object.keys(BENCH_NAMES).filter((m) => data[split][m])) {
       const s = data[split][m].summary, rep = data[split][m].repeats;
       const cell = (k, f, i) => {
@@ -1090,7 +1090,7 @@ async function loadRecovery() {
   if (!rstate.caseId && rstate.cases.length) selectRec(rstate.cases[0].case_id);
 }
 function renderRecList() {
-  const groups = KO() ? { linked: "진단에서 이어진 복구", dev: "개발 세트", holdout: "평가 세트", holdout2: "새 평가 세트" } : { linked: "After a diagnosis", dev: "Development", holdout: "Held-out", holdout2: "Fresh held-out" };
+  const groups = KO() ? { linked: "진단에서 이어진 복구", dev: "개발 세트", holdout: "평가 세트", holdout2: "새 평가 세트", holdout3: "대규모 평가 세트" } : { linked: "After a diagnosis", dev: "Development", holdout: "Held-out", holdout2: "Fresh held-out", holdout3: "Large held-out" };
   let html = "";
   for (const [split, label] of Object.entries(groups)) {
     html += `<div class="group">${label}</div>`;
@@ -1246,15 +1246,26 @@ function renderRecSide() {
   const rv = $("#rreveal");
   if (rv) rv.onclick = () => { rstate.showTruth = true; renderRecSide(); };
 }
+function ciLine(data, split, kind = "diagnosis") {
+  const rep = data.report && data.report[split] && data.report[split][kind];
+  if (!rep || !rep.methods.agent || rep.methods.agent.incomplete) return "";
+  const a = rep.methods.agent;
+  if (kind === "diagnosis") {
+    const p = rep.paired.agent_minus_playbook_pct;
+    return `<p class="lead">${L(`Agent: ${a.decision_accuracy_pct}% right decisions, 95% interval ${a.ci95_pct[0]} to ${a.ci95_pct[1]}%.`, `에이전트: 맞는 결정 ${a.decision_accuracy_pct}%, 95% 신뢰구간 ${a.ci95_pct[0]}~${a.ci95_pct[1]}%.`)}${p ? L(` Against the fixed playbook on the same alarms: ${p.diff > 0 ? "+" : ""}${p.diff} points (${p.ci95[0]} to ${p.ci95[1]}).`, ` 같은 알람에서 고정 규칙 대비 ${p.diff > 0 ? "+" : ""}${p.diff}%p (${p.ci95[0]}~${p.ci95[1]}).`) : ""}</p>`;
+  }
+  const p = rep.paired.agent_minus_monitor_rule_off_target_per_recovery;
+  return `<p class="lead">${L(`Agent: ${a.off_target_per_recovery} off-target lots per recovery, 95% interval ${a.ci95[0]} to ${a.ci95[1]}.`, `에이전트: 복구당 이탈 lot ${a.off_target_per_recovery}개, 95% 신뢰구간 ${a.ci95[0]}~${a.ci95[1]}.`)}${p ? L(` Against the two-monitor rule: ${p.diff} per recovery (${p.ci95[0]} to ${p.ci95[1]}).`, ` 모니터 웨이퍼 2장 규칙 대비 복구당 ${p.diff}개 (${p.ci95[0]}~${p.ci95[1]}).`) : ""}</p>`;
+}
 function recBench(data) {
   const rec = data.recovery;
   if (!rec) return "";
   const cols = [["off_target_lots", L("Off-target lots", "관리 한계 이탈 lot")], ["out_of_spec_lots", L("Out-of-spec lots", "규격 이탈 lot")], ["avg_monitor_wafers", L("Monitor wafers per recovery", "복구당 모니터 웨이퍼")], ["avg_downtime_h", L("Chamber time, h", "장비 정지, 시간")], ["needs_engineer", L("Sent to an engineer", "엔지니어 이관")], ["no_shift_max_change_pct", L("Change when nothing changed, %", "변화 없을 때 레시피 변경, %")]];
   let html = `<h1 style="margin-top:40px">${L("Recovery after PM", "PM 후 복구")}</h1><p class="lead">${L("The same chamber, held after PM, recovered by each method. 40 production lots follow each release and are scored on the true film. Success criteria were written before any agent run (docs/RECOVERY.md).", "PM 뒤 홀드된 같은 챔버를 방법마다 복구합니다. 해제 뒤 40개 생산 lot을 실제 막 두께로 채점합니다. 성공 기준은 에이전트를 돌리기 전에 정했습니다 (docs/RECOVERY.md).")}</p>`;
-  for (const [split, title] of [["holdout2", L("Fresh held-out recoveries (after the fix)", "새 평가 세트 (수정 후)")], ["holdout", L("Held-out recoveries", "평가 세트")], ["dev", L("Development recoveries", "개발 세트")]]) {
+  for (const [split, title] of [["holdout3", L("Large held-out set (50 recoveries)", "대규모 평가 세트 (50건)")], ["holdout2", L("Fresh held-out recoveries (after the fix)", "새 평가 세트 (수정 후)")], ["holdout", L("Held-out recoveries", "평가 세트")], ["dev", L("Development recoveries", "개발 세트")]]) {
     const ms = Object.keys(rec[split] || {});
     if (!ms.length) continue;
-    html += `<h2>${title}</h2><table class="sum"><tr><th>${L("Method", "방법")}</th>${cols.map((c) => `<th>${c[1]}</th>`).join("")}</tr>`;
+    html += `<h2>${title}</h2>${ciLine(data, split, "recovery")}<table class="sum"><tr><th>${L("Method", "방법")}</th>${cols.map((c) => `<th>${c[1]}</th>`).join("")}</tr>`;
     const ABL = {
       "agent_hide-history": [L("Agent, earlier PMs hidden", "에이전트, 이전 PM 이력 숨김")],
       "agent_hide-pm_detail": [L("Agent, PM details hidden", "에이전트, PM 작업 내용 숨김")],

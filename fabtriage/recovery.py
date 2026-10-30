@@ -49,6 +49,7 @@ SCENARIOS = ["post_pm_reset", "seasoning", "fast_drift", "metrology_bias", "no_s
 DEV_SEEDS = [1, 2, 3, 4]
 HOLDOUT_SEEDS = [5, 6]  # run once on Oct 29; one run in 30 exposed the drift sign mix-up
 HOLDOUT2_SEEDS = [7, 8]  # fresh set for the version with the sign rule
+HOLDOUT3_SEEDS = list(range(9, 19))  # large held-out set (50 recoveries), for confidence intervals
 LINKED_FROM = [f"pm_shift-{s}" for s in sim.DEV_SEEDS]  # recoveries that continue a diagnosis; not in the benchmark
 
 
@@ -59,7 +60,8 @@ def benchmark(split: str = "dev") -> list:
         "dev": DEV_SEEDS,
         "holdout": HOLDOUT_SEEDS,
         "holdout2": HOLDOUT2_SEEDS,
-        "all": DEV_SEEDS + HOLDOUT_SEEDS + HOLDOUT2_SEEDS,
+        "holdout3": HOLDOUT3_SEEDS,
+        "all": DEV_SEEDS + HOLDOUT_SEEDS + HOLDOUT2_SEEDS + HOLDOUT3_SEEDS,
     }[split]
     return [f"rec_{s}-{seed}" for s in SCENARIOS for seed in seeds]
 

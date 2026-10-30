@@ -80,13 +80,27 @@ def write_results(label, split, runs_dir: Path, rows: list) -> dict:
     return result
 
 
-def run_split(method, split, runs_dir: Path, client=None, backend=None, only=None, hide=()) -> dict:
+def _saved(runs_dir: Path, label: str, case_id: str):
+    path = runs_dir / label / case_id / "run.json"
+    if path.exists():
+        try:
+            data = json.loads(path.read_text())
+        except ValueError:
+            return None
+        if data.get("score") and data.get("status") in ("released", "needs_engineer"):
+            return data["score"]
+    return None
+
+
+def run_split(method, split, runs_dir: Path, client=None, backend=None, only=None, hide=(), resume=False) -> dict:
     ids = R.benchmark(split)
     if only:
         ids = [i for i in ids if any(i.removeprefix("rec_").startswith(o) for o in only)]
     rows = []
     for cid in ids:
-        row = run_one(method, cid, runs_dir, client, backend, hide=hide)
+        row = _saved(runs_dir, _label(method, backend, hide), cid) if resume else None
+        if row is None:
+            row = run_one(method, cid, runs_dir, client, backend, hide=hide)
         print(
             f"{cid:26s} status={row['status']:14s} off_target={row['off_target_lots']:2d} oos={row['out_of_spec_lots']} "
             f"monitors={row['monitor_wafers']} change={row['recipe_change_pct']}% calls={row['tool_calls']}",
@@ -96,13 +110,13 @@ def run_split(method, split, runs_dir: Path, client=None, backend=None, only=Non
     return write_results(_label(method, backend, hide), split, runs_dir, rows)
 
 
-def run_repeats(method, split, runs_dir: Path, repeats: int, client=None, backend=None) -> dict:
-    label = _label(method, backend)
+def run_repeats(method, split, runs_dir: Path, repeats: int, client=None, backend=None, hide=(), resume=False) -> dict:
+    label = _label(method, backend, hide)
     summaries = []
     for k in range(1, repeats + 1):
         print(f"--- repeat {k} of {repeats}", flush=True)
         where = runs_dir if k == 1 else runs_dir / "repeats" / f"r{k}"
-        summaries.append(run_split(method, split, where, client, backend)["summary"])
+        summaries.append(run_split(method, split, where, client, backend, hide=hide, resume=resume)["summary"])
     keys = ["off_target_lots", "out_of_spec_lots", "avg_monitor_wafers", "avg_downtime_h", "needs_engineer", "no_shift_max_change_pct", "avg_tool_calls"]
     mean_std = {}
     for k in keys:

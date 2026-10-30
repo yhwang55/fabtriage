@@ -112,7 +112,7 @@ def run_one(
 
 
 def run_repeats(
-    method: str, split: str, runs_dir: Path, repeats: int, client=None, backend=None, sam_client=None
+    method: str, split: str, runs_dir: Path, repeats: int, client=None, backend=None, sam_client=None, resume=False
 ) -> dict:
     """Run a split several times. Repeat 1 lands in the normal place (the console shows it);
     repeats 2..n go to runs/repeats/r<k>/. Writes results_<label>_<split>_repeats.json."""
@@ -121,7 +121,7 @@ def run_repeats(
     for k in range(1, repeats + 1):
         print(f"--- repeat {k} of {repeats}", flush=True)
         where = runs_dir if k == 1 else runs_dir / "repeats" / f"r{k}"
-        result = run_split(method, split, where, client, backend, sam_client=sam_client)
+        result = run_split(method, split, where, client, backend, sam_client=sam_client, resume=resume)
         summaries.append(result["summary"])
         for r in result["rows"]:
             per_case.setdefault(r["case_id"], []).append(bool(r["decision_correct"]))
@@ -151,8 +151,20 @@ def spread(summaries: list) -> dict:
     return out
 
 
+def _saved_row(runs_dir: Path, label: str, case_id: str):
+    path = runs_dir / label / case_id / "run.json"
+    if path.exists():
+        try:
+            data = json.loads(path.read_text())
+        except ValueError:
+            return None
+        if data.get("score") and data.get("status") not in ("error", "running"):
+            return data["score"]
+    return None
+
+
 def run_split(
-    method: str, split: str, runs_dir: Path, client=None, backend=None, limit=None, only=None, sam_client=None
+    method: str, split: str, runs_dir: Path, client=None, backend=None, limit=None, only=None, sam_client=None, resume=False
 ) -> dict:
     ids = sim.benchmark(split)
     if only:
@@ -160,8 +172,11 @@ def run_split(
     if limit:
         ids = ids[:limit]
     rows = []
+    label = method if backend in (None, "meta") or method not in MODEL_METHODS else f"{method}_{backend}"
     for cid in ids:
-        row = run_one(method, cid, runs_dir, client, backend, sam_client)
+        row = _saved_row(runs_dir, label, cid) if resume else None
+        if row is None:
+            row = run_one(method, cid, runs_dir, client, backend, sam_client)
         mark = "ok " if row["decision_correct"] else "BAD"
         print(
             f"{mark} {cid:20s} cause={row['cause']!s:10s} truth={row['true_cause']:10s} "
@@ -169,7 +184,6 @@ def run_split(
             flush=True,
         )
         rows.append(row)
-    label = method if backend in (None, "meta") or method not in MODEL_METHODS else f"{method}_{backend}"
     return write_results(label, split, runs_dir, rows)
 
 

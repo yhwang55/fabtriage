@@ -35,32 +35,36 @@ def main(argv=None) -> None:
     p = argparse.ArgumentParser(prog="fabtriage")
     sub = p.add_subparsers(dest="cmd", required=True)
     c = sub.add_parser("cases")
-    c.add_argument("--split", default="all", choices=["dev", "holdout", "holdout2", "all"])
+    c.add_argument("--split", default="all", choices=["dev", "holdout", "holdout2", "holdout3", "all"])
     e = sub.add_parser("eval")
     e.add_argument("--method", required=True, choices=["agent", "agent_noverify", "oneshot", "playbook", "always_hold"])
-    e.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "all"])
+    e.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "holdout3", "all"])
     e.add_argument("--backend", default="meta", choices=["meta", "baseten"])
     e.add_argument("--limit", type=int)
     e.add_argument("--only", nargs="*", help="scenario name prefixes, e.g. pm_shift heater_drift")
     e.add_argument("--repeats", type=int, default=1, help="run the split this many times and report mean and spread")
+    e.add_argument("--resume", action="store_true", help="skip cases that already have a saved run (after an interruption)")
     r = sub.add_parser("run")
     r.add_argument("--case", required=True)
     r.add_argument("--method", default="agent", choices=["agent", "agent_noverify", "oneshot", "playbook", "always_hold"])
     r.add_argument("--backend", default="meta", choices=["meta", "baseten"])
     rs = sub.add_parser("rescore", help="rebuild a results file from saved runs")
     rs.add_argument("--method", required=True, choices=["agent", "agent_noverify", "oneshot", "playbook", "always_hold"])
-    rs.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "all"])
+    rs.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "holdout3", "all"])
     im = sub.add_parser("impact", help="per-100-alarm impact under stated assumptions")
-    im.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "all"])
+    im.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "holdout3", "all"])
     rc = sub.add_parser("recover", help="recovery after PM: bring a held chamber back to target")
     rc.add_argument("--method", required=True, choices=["agent", "monitor_rule", "reset_recipe", "keep_recipe"])
-    rc.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "all", "linked"])
+    rc.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "holdout3", "all", "linked"])
     rc.add_argument("--backend", default="meta", choices=["meta", "baseten"])
     rc.add_argument("--only", nargs="*", help="scenario names, e.g. seasoning fast_drift")
     rc.add_argument("--repeats", type=int, default=1)
+    rc.add_argument("--resume", action="store_true", help="skip recoveries that already have a saved run")
     rc.add_argument("--hide", nargs="*", default=[], choices=["history", "pm_detail"], help="ablation: hide clues from the agent")
     rr = sub.add_parser("recover-report", help="recovery results and the pre-registered success criteria")
-    rr.add_argument("--split", default="holdout", choices=["dev", "holdout", "holdout2", "all"])
+    rr.add_argument("--split", default="holdout", choices=["dev", "holdout", "holdout2", "holdout3", "all"])
+    rp = sub.add_parser("report", help="confidence intervals for diagnosis and recovery on one split")
+    rp.add_argument("--split", default="holdout3", choices=["dev", "holdout", "holdout2", "holdout3"])
     dm = sub.add_parser("demo", help="open the read-only demo from docs/demo; no API key needed")
     dm.add_argument("--port", type=int, default=8771)
     ex = sub.add_parser("export", help="write the console as a static read-only site")
@@ -78,12 +82,12 @@ def main(argv=None) -> None:
             print(f"{cid:20s} {a['type']:4s} {a['chamber']:8s} {a['value']!s:9s} confounder={case.truth['confounder']}")
     elif args.cmd == "eval" and args.repeats > 1:
         client, sam = _clients(args.method, args.backend)
-        out = evaluate.run_repeats(args.method, args.split, RUNS, args.repeats, client, args.backend, sam)
+        out = evaluate.run_repeats(args.method, args.split, RUNS, args.repeats, client, args.backend, sam, resume=args.resume)
         print(json.dumps({k: out[k] for k in ("mean_std", "cases_always_right", "cases_sometimes_wrong")}, indent=2))
     elif args.cmd == "eval":
         client, sam = _clients(args.method, args.backend)
         result = evaluate.run_split(
-            args.method, args.split, RUNS, client, args.backend, args.limit, args.only, sam_client=sam
+            args.method, args.split, RUNS, client, args.backend, args.limit, args.only, sam_client=sam, resume=args.resume
         )
         print(json.dumps(result["summary"], indent=2))
     elif args.cmd == "run":
@@ -110,10 +114,10 @@ def main(argv=None) -> None:
         if args.cmd == "recover":
             client = make_client(args.backend) if args.method == "agent" else None
             if args.repeats > 1:
-                out = RE.run_repeats(args.method, args.split, rdir, args.repeats, client, args.backend)
+                out = RE.run_repeats(args.method, args.split, rdir, args.repeats, client, args.backend, hide=args.hide, resume=args.resume)
                 print(json.dumps(out["mean_std"], indent=2))
             else:
-                out = RE.run_split(args.method, args.split, rdir, client, args.backend, args.only, hide=args.hide)
+                out = RE.run_split(args.method, args.split, rdir, client, args.backend, args.only, hide=args.hide, resume=args.resume)
                 print(json.dumps(out["summary"], indent=2))
         else:
             res = RE.load_results(rdir, args.split)
@@ -123,6 +127,29 @@ def main(argv=None) -> None:
                 print(m[:30].ljust(32) + "".join(str(d["summary"][c]).rjust(16) for c in cols))
             for c in RE.criteria(res):
                 print(("MET  " if c["met"] else "MISS ") + f"{c['criterion']}: {c['value']}")
+    elif args.cmd == "report":
+        from .stats import report
+
+        data = report(RUNS, args.split)
+        d, r = data["diagnosis"], data["recovery"]
+        print(f"Diagnosis, {d['n_cases']} alarms (per-case mean over repeats, 95% bootstrap CI over cases)")
+        for m, v in d["methods"].items():
+            if v.get("incomplete"):
+                print(f"  {m:24s} incomplete ({v['repeats']} repeat files)")
+                continue
+            print(f"  {m:24s} right decision {v['decision_accuracy_pct']}% [{v['ci95_pct'][0]}, {v['ci95_pct'][1]}]  "
+                  f"missed faults {v['missed_faults_per_run']}  needless holds {v['needless_holds_per_run']}  repeats {v['repeats']}")
+        for k, v in d["paired"].items():
+            print(f"  {k:40s} {v['diff']} points [{v['ci95'][0]}, {v['ci95'][1]}]")
+        print(f"Recovery, {r['n_cases']} recoveries")
+        for m, v in r["methods"].items():
+            if v.get("incomplete"):
+                print(f"  {m:30s} incomplete ({v['repeats']} repeat files)")
+                continue
+            print(f"  {m:30s} off-target per recovery {v['off_target_per_recovery']} [{v['ci95'][0]}, {v['ci95'][1]}]  "
+                  f"out of spec {v['out_of_spec_total_per_run']}  monitors {v['monitor_wafers_per_recovery']}  repeats {v['repeats']}")
+        for k, v in r["paired"].items():
+            print(f"  {k:52s} {v['diff']} [{v['ci95'][0]}, {v['ci95'][1]}]")
     elif args.cmd == "demo":
         import functools
         import http.server

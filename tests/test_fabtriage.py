@@ -16,7 +16,8 @@ def test_simulator_is_deterministic():
 
 def test_benchmark_splits_do_not_overlap():
     assert not set(sim.benchmark("dev")) & set(sim.benchmark("holdout"))
-    assert len(sim.benchmark("all")) == len(sim.SCENARIOS) * 8
+    assert len(sim.benchmark("all")) == len(sim.SCENARIOS) * 18
+    assert not set(sim.benchmark("holdout3")) & set(sim.benchmark("dev") + sim.benchmark("holdout") + sim.benchmark("holdout2"))
     assert not set(sim.benchmark("holdout2")) & set(sim.benchmark("dev") + sim.benchmark("holdout"))
 
 
@@ -379,3 +380,19 @@ def test_recovery_ablation_hides_clues_and_linked_cases_load():
     for cid in R.benchmark("linked"):
         c = R.load(cid)
         assert c.origin and c.chamber == __import__("fabtriage.sim", fromlist=["x"]).load(c.origin["case_id"]).alarm["chamber"]
+
+
+def test_stats_helpers(tmp_path):
+    import numpy as np
+    from fabtriage import stats
+
+    lo, hi = stats.wilson(14, 14)
+    assert 0.78 < lo < 0.79 and hi == 1.0
+    reps = [[{"case_id": "a", "x": 1}, {"case_id": "b", "x": 0}], [{"case_id": "a", "x": 1}, {"case_id": "b", "x": 1}]]
+    v = stats.per_case(reps, ["a", "b"], lambda r: r["x"])
+    assert list(v) == [1.0, 0.5]
+    lo, hi = stats.boot_ci(np.array([1.0] * 10))
+    assert lo == hi == 1.0
+    evaluate.run_split("playbook", "holdout2", tmp_path)
+    d = stats.diagnosis(tmp_path, "holdout2")
+    assert d["methods"]["playbook"]["repeats"] == 1 and "ci95_pct" in d["methods"]["playbook"]
