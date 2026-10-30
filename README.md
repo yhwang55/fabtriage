@@ -2,7 +2,7 @@
 
 **An agent that investigates semiconductor fab alarms and proposes what to do about them, with every claim checked against the evidence before an engineer signs off.**
 
-**Live demo (read-only, built from saved runs): https://yhwang55.github.io/fabtriage/**
+**Live demo: https://yhwang55.github.io/fabtriage/** (a one-page overview with the results; the read-only console, built from saved runs, is at [/demo/](https://yhwang55.github.io/fabtriage/demo/))
 Korean interface: https://yhwang55.github.io/fabtriage/demo/?lang=ko (agent output stays in its original English).
 
 Built during the Meta Global AI Developer Hackathon (Oct 26 to Nov 4, 2026). Everything in this repository was written during the event.
@@ -263,6 +263,8 @@ cp .env.example .env    # add your MODEL_API_KEY
 python -m fabtriage serve
 ```
 
+
+The front page (`docs/index.html`) is generated from the same saved results: `python scripts/build_landing.py`, after `export`.
 ## Console
 
 ```bash
