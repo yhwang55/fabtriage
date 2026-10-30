@@ -1014,6 +1014,7 @@ async function renderBench() {
   let html = KO()
     ? `<h1>성능 비교</h1><p class="lead">모든 방법이 같은 가상 알람을 같은 도구와 같은 검증기로 조사합니다. 개발 세트는 에이전트를 만드는 동안 썼습니다. 평가 세트는 한 번만 돌렸고, 거기서 나온 실패 하나를 읽고 공정 지식 한 줄을 더한 뒤, 아무도 본 적 없는 새 평가 세트로 그 버전을 확인했습니다. 마지막으로 70건짜리 대규모 평가 세트로 신뢰구간을 구했습니다.</p>`
     : `<h1>Benchmark</h1><p class="lead">Every method investigates the same simulated alarms through the same tools and the same verifier. The development set was used while building the agent. The held-out set was run once; after reading its one failure we added a single line of process knowledge and checked that version on a fresh held-out set nobody had seen. Last, a larger held-out set of 70 alarms gives confidence intervals.</p>`;
+  html += sweepHtml(data);
   const splits = KO() ? [["holdout3", "대규모 평가 세트"], ["holdout2", "새 평가 세트 (수정 후)"], ["holdout", "평가 세트"], ["dev", "개발 세트"]] : [["holdout3", "Large held-out set"], ["holdout2", "Fresh held-out alarms (after the fix)"], ["holdout", "Held-out alarms"], ["dev", "Development alarms"]];
   for (const [split, title] of splits) {
     const ms = Object.keys(data[split] || {}).filter((m) => ["agent", "playbook"].includes(m));
@@ -1246,6 +1247,58 @@ function renderRecSide() {
   $("#rside").innerHTML = html;
   const rv = $("#rreveal");
   if (rv) rv.onclick = () => { rstate.showTruth = true; renderRecSide(); };
+}
+function sweepChart(rows, key, opts) {
+  const W = 420, H = 240, P = { l: 40, r: 120, t: 12, b: 40 };
+  const x = (i) => P.l + (i / 3) * (W - P.l - P.r);
+  const y = (v) => P.t + (1 - (v - opts.lo) / (opts.hi - opts.lo)) * (H - P.t - P.b);
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:520px" role="img" aria-label="${esc(opts.title)}">`;
+  for (const t of opts.ticks) svg += `<line x1="${P.l}" x2="${W - P.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)"/><text x="${P.l - 6}" y="${y(t) + 4}" text-anchor="end">${t}${opts.unit}</text>`;
+  for (let i = 0; i < 4; i++) svg += `<text x="${x(i)}" y="${H - 14}" text-anchor="middle">${L("level", "단계")} ${i}</text>`;
+  svg += `<text x="${P.l}" y="${H - 2}">${esc(opts.xnote)}</text>`;
+  let k = 0;
+  const labels = [];
+  for (const [m, style] of Object.entries(opts.series)) {
+    const r = rows[m];
+    if (!r) continue;
+    const off = (k++ - 1) * 4;
+    const pts = r.map((v, i) => (v ? [x(i) + off, y(v[key]), v] : null)).filter(Boolean);
+    if (!pts.length) continue;
+    if (!style.noci) for (const [px, , v] of pts) svg += `<line x1="${px}" x2="${px}" y1="${y(v.ci[0])}" y2="${y(v.ci[1])}" stroke="${style.color}" stroke-opacity=".3" stroke-width="3"/>`;
+    svg += `<polyline fill="none" stroke="${style.color}" stroke-width="${style.w || 2}" ${style.dash ? `stroke-dasharray="${style.dash}"` : ""} points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}"/>`;
+    for (const [px, py] of pts) svg += `<circle cx="${px}" cy="${py}" r="3" fill="${style.color}"/>`;
+    const last = pts[pts.length - 1];
+    labels.push({ x: last[0] + 10, y: last[1] + 4, text: style.label, color: style.color });
+  }
+  labels.sort((a, b) => a.y - b.y);  // keep end labels from overlapping
+  for (let i = 1; i < labels.length; i++) if (labels[i].y - labels[i - 1].y < 14) labels[i].y = labels[i - 1].y + 14;
+  for (const lb of labels) svg += `<text x="${lb.x}" y="${lb.y}" style="fill:${lb.color};font-weight:600">${esc(lb.text)}</text>`;
+  return svg + `</svg>`;
+}
+function sweepHtml(data) {
+  const sw = data.sweep;
+  if (!sw) return "";
+  const D = sw.diagnosis, Rr = sw.recovery;
+  let html = `<h2>${L("Stress test: where it breaks", "스트레스 테스트: 어디서 무너지는가")}</h2>
+    <p class="lead">${L("Faults keep their size; the evidence gets weaker at each level (noisier film, fewer measured lots, faults that began more recently). 35 alarms and 25 recoveries per level, the same seeds at every level. Bars are 95% intervals. The noise floor is a cheat that knows the hidden truth: the off-target lots nobody could avoid.", "고장 크기는 그대로 두고 단계마다 증거를 약하게 만듭니다 (막 두께 잡음 증가, 측정 lot 감소, 고장 시작 시점이 더 최근). 단계마다 알람 35건, 복구 25건이고 모든 단계에서 같은 시드를 씁니다. 막대는 95% 신뢰구간입니다. 잡음 한계선은 숨겨진 정답을 아는 가상의 방법으로, 누구도 피할 수 없는 이탈 lot을 보여줍니다.")}</p>
+    <div class="pair">`;
+  html += `<div><h3>${L("Diagnosis: right decisions", "진단: 맞는 결정 비율")}</h3>${sweepChart(D, "decision_accuracy_pct", {
+    lo: 30, hi: 100, ticks: [40, 60, 80, 100], unit: "%", title: "diagnosis sweep", xnote: L("Evidence gets weaker at each level", "단계가 오를수록 증거가 약해짐"),
+    series: {
+      agent: { label: L("Agent", "에이전트"), color: "var(--ink)", w: 3 },
+      oneshot: { label: L("No tools", "도구 없음"), color: "var(--slate)", dash: "5 3" },
+      playbook: { label: L("Playbook", "고정 규칙"), color: "#8A6100" },
+      always_hold: { label: L("Always hold", "무조건 홀드"), color: "var(--muted)", dash: "2 3", noci: true },
+    } })}</div>`;
+  html += `<div><h3>${L("Recovery: off-target lots per recovery", "복구: 복구당 이탈 lot")}</h3>${sweepChart(Rr, "off_target_per_recovery", {
+    lo: 0, hi: 10, ticks: [0, 2, 4, 6, 8, 10], unit: "", title: "recovery sweep", xnote: L("Film and metrology noise grow at each level", "단계가 오를수록 잡음이 커짐"),
+    series: {
+      agent: { label: L("Agent", "에이전트"), color: "var(--ink)", w: 3 },
+      monitor_rule: { label: L("Two monitors", "모니터 2장 규칙"), color: "#8A6100" },
+      keep_recipe: { label: L("Keep recipe", "레시피 유지"), color: "var(--muted)", dash: "2 3", noci: true },
+      oracle: { label: L("Noise floor", "잡음 한계"), color: "var(--slate)", dash: "5 3" },
+    } })}</div></div>`;
+  return html;
 }
 function ciLine(data, split, kind = "diagnosis") {
   const rep = data.report && data.report[split] && data.report[split][kind];

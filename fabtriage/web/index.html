@@ -1248,14 +1248,15 @@ function renderRecSide() {
   if (rv) rv.onclick = () => { rstate.showTruth = true; renderRecSide(); };
 }
 function sweepChart(rows, key, opts) {
-  const W = 420, H = 230, P = { l: 40, r: 120, t: 12, b: 34 };
+  const W = 420, H = 240, P = { l: 40, r: 120, t: 12, b: 40 };
   const x = (i) => P.l + (i / 3) * (W - P.l - P.r);
   const y = (v) => P.t + (1 - (v - opts.lo) / (opts.hi - opts.lo)) * (H - P.t - P.b);
   let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:520px" role="img" aria-label="${esc(opts.title)}">`;
   for (const t of opts.ticks) svg += `<line x1="${P.l}" x2="${W - P.r}" y1="${y(t)}" y2="${y(t)}" stroke="var(--line)"/><text x="${P.l - 6}" y="${y(t) + 4}" text-anchor="end">${t}${opts.unit}</text>`;
   for (let i = 0; i < 4; i++) svg += `<text x="${x(i)}" y="${H - 14}" text-anchor="middle">${L("level", "단계")} ${i}</text>`;
-  svg += `<text x="${P.l}" y="${H - 1}">${esc(opts.xnote)}</text>`;
+  svg += `<text x="${P.l}" y="${H - 2}">${esc(opts.xnote)}</text>`;
   let k = 0;
+  const labels = [];
   for (const [m, style] of Object.entries(opts.series)) {
     const r = rows[m];
     if (!r) continue;
@@ -1266,8 +1267,11 @@ function sweepChart(rows, key, opts) {
     svg += `<polyline fill="none" stroke="${style.color}" stroke-width="${style.w || 2}" ${style.dash ? `stroke-dasharray="${style.dash}"` : ""} points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}"/>`;
     for (const [px, py] of pts) svg += `<circle cx="${px}" cy="${py}" r="3" fill="${style.color}"/>`;
     const last = pts[pts.length - 1];
-    svg += `<text x="${last[0] + 8}" y="${last[1] + 4}" style="fill:${style.color};font-weight:600">${esc(style.label)}</text>`;
+    labels.push({ x: last[0] + 10, y: last[1] + 4, text: style.label, color: style.color });
   }
+  labels.sort((a, b) => a.y - b.y);  // keep end labels from overlapping
+  for (let i = 1; i < labels.length; i++) if (labels[i].y - labels[i - 1].y < 14) labels[i].y = labels[i - 1].y + 14;
+  for (const lb of labels) svg += `<text x="${lb.x}" y="${lb.y}" style="fill:${lb.color};font-weight:600">${esc(lb.text)}</text>`;
   return svg + `</svg>`;
 }
 function sweepHtml(data) {

@@ -93,6 +93,27 @@ The agent has 1.63 fewer off-target lots per recovery than the best guide rule (
 interval 0.99 to 2.33). Of its remaining off-target lots, 30 of 35 come from the metrology
 offset case described below.
 
+### Stress test: where it breaks
+
+A perfect score on 70 alarms says little about margin, so the last test weakens the evidence
+step by step (noisier film, fewer measured lots, faults that began more recently) and keeps
+fault sizes the same. Plan written first: [docs/STRESS.md](docs/STRESS.md).
+
+| Level | Diagnosis: agent | No tools | Playbook | Recovery: agent | Two-monitor rule | Oracle |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | 97.1% | 97.1% | 88.6% | 0.32 | 3.04 | 0.56 |
+| 1 | 100% | 80.0% | 71.4% | 0.68 | 3.64 | 0.80 |
+| 2 | 94.3% | 62.9% | 68.6% | 1.80 | 4.68 | 1.52 |
+| 3 | 68.6% | 54.3% | 65.7% | 3.16 | 5.48 | 3.28 |
+
+Diagnosis is right decisions (35 alarms per level); recovery is off-target lots per
+recovery (25 per level). The agent holds up through level 2 while the playbook and the
+no-tools model fall off; at level 3 its lead over the playbook is gone (+2.9 points, interval
+spans zero). It fails safe: 0 missed faults at level 3 against the playbook's 4, but 11
+needless holds. In recovery it stays well below the guide rule and close to the oracle at
+every level, but it did not run more monitor wafers as noise grew, which is the next thing
+to fix.
+
 ### Fresh held-out set, after the fix (14 cases)
 
 | method | right decision | missed real faults | needless holds | tool calls | re-measures | lot delay (h) |
