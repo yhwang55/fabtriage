@@ -123,6 +123,8 @@ def benchmark() -> dict:
 
         out[split + "_impact"] = table(RUNS, split)
     out["recovery"] = recovery_benchmark()
+    sw = RUNS / "sweep.json"
+    out["sweep"] = json.loads(sw.read_text()) if sw.exists() else None
     out["report"] = {}
     for split in ("holdout3",):
         path = RUNS / f"report_{split}.json"

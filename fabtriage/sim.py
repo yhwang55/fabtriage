@@ -36,6 +36,17 @@ LOT_INTERVAL_H = 0.3
 MEASURE_PROB = 0.5
 REMEASURE_DELAY_H = 1.5
 
+# Stress levels for the difficulty sweep. Level 0 is the benchmark as it always was. Higher
+# levels keep every fault the same size but make the evidence weaker: noisier film, fewer
+# measured lots, and faults that started more recently (fewer lots since they began).
+LEVELS = {
+    0: {"noise": 1.2, "measure_prob": 0.5, "recency": 1.0},
+    1: {"noise": 2.0, "measure_prob": 0.35, "recency": 0.6},
+    2: {"noise": 2.8, "measure_prob": 0.25, "recency": 0.4},
+    3: {"noise": 3.6, "measure_prob": 0.15, "recency": 0.25},
+}
+STRESS_SEEDS = list(range(19, 24))
+
 
 def site_positions() -> np.ndarray:
     """49 measurement sites: center plus rings of 8, 16 and 24 (radius normalized to 1)."""
@@ -75,8 +86,10 @@ class Case:
 class _World:
     """Generates the history. Scenario functions tweak its knobs before `run()`."""
 
-    def __init__(self, rng: np.random.Generator):
+    def __init__(self, rng: np.random.Generator, level: int = 0):
         self.rng = rng
+        self.noise = LEVELS[level]["noise"]
+        self.measure_prob = LEVELS[level]["measure_prob"]
         self.offset = {c: rng.normal(0, 1.2) for c in CHAMBERS}
         self.drift = {c: max(0.05, rng.normal(0.25, 0.08)) for c in CHAMBERS}  # A per 100 wafers
         self.since_pm = {c: int(rng.integers(0, 500)) for c in CHAMBERS}
@@ -116,7 +129,7 @@ class _World:
             clean = route.get("clean") or CLEAN_TOOLS[int(self.rng.integers(2))]
             chamber = route.get("chamber") or CHAMBERS[int(self.rng.integers(4))]
             met = route.get("met") or MET_TOOLS[int(self.rng.integers(2))]
-            measured = route.get("measured", True) if last else self.rng.random() < MEASURE_PROB
+            measured = route.get("measured", True) if last else self.rng.random() < self.measure_prob
             lot_id = f"LOT-{1000 + i}"
             slot = int(self.rng.integers(1, WAFERS_PER_LOT + 1))
             true_sites, fdc = self._process(t, clean, chamber, last_pm[chamber], last and route.get("spot"))
@@ -160,7 +173,7 @@ class _World:
                 fdc[p] += delta  # what the sensor reports
                 if physical and p == "heater_temp_C":
                     mean += 0.8 * delta  # a real temperature change moves the deposition rate
-        mean += rng.normal(0, 1.2)
+        mean += rng.normal(0, self.noise)
         if spot:
             mean += spot[3]  # a one-off wafer excursion
         edge = self.edge_bias[chamber] + self.edge_growth[chamber] * self.since_pm[chamber] / 100
@@ -211,11 +224,32 @@ def _pick(rng, items):
     return items[int(rng.integers(len(items)))]
 
 
-def generate(scenario: str, seed: int) -> Case:
+def _alarm_is_real(case: Case) -> bool:
+    a = case.alarm
+    if a["type"] == "FDC":
+        return a["value"] > 403.0
+    return not (LCL <= a["value"] <= UCL)
+
+
+def generate(scenario: str, seed: int, level: int = 0) -> Case:
+    """Level 0 is the original benchmark. At higher levels, a history whose alarm lot happens
+    to read inside the limits (so no alarm would fire) is redrawn with the next attempt."""
+    if level == 0:
+        return _generate(scenario, seed, 0, 0)
+    for attempt in range(50):
+        case = _generate(scenario, seed, level, attempt)
+        if _alarm_is_real(case):
+            return case
+    raise RuntimeError(f"no valid alarm for {scenario} seed {seed} level {level}")
+
+
+def _generate(scenario: str, seed: int, level: int, attempt: int) -> Case:
     if scenario not in SCENARIOS:
         raise ValueError(f"unknown scenario {scenario}")
-    rng = np.random.default_rng(10_000 * (SCENARIOS.index(scenario) + 1) + seed)
-    w = _World(rng)
+    base = 10_000 * (SCENARIOS.index(scenario) + 1) + seed
+    rng = np.random.default_rng(base if level == 0 else [base, level, attempt])
+    w = _World(rng, level)
+    rec = LEVELS[level]["recency"]
     x = _pick(rng, CHAMBERS)
     others = [c for c in CHAMBERS if c != x]
     confound = bool(rng.random() < 0.5)
@@ -224,7 +258,7 @@ def generate(scenario: str, seed: int) -> Case:
     route = {"chamber": x}
 
     if scenario == "pm_shift":
-        pm_t = round(T - rng.uniform(3, 9), 2)
+        pm_t = round(T - rng.uniform(3, 9) * rec, 2)
         w.pm_times[x] = [p for p in w.pm_times[x] if p < pm_t - 20] + [pm_t]
         shift = float(rng.uniform(13, 19))
         w.chamber_step[x].append((pm_t, shift))
@@ -265,7 +299,7 @@ def generate(scenario: str, seed: int) -> Case:
     elif scenario == "metrology_error":
         persistent = bool(rng.random() < 0.6)
         shift = float(rng.uniform(17, 23))
-        start = round(T - (rng.uniform(2.5, 5) if persistent else 0.05), 2)
+        start = round(T - (rng.uniform(2.5, 5) * rec if persistent else 0.05), 2)
         w.met_shift["MET02"].append((start, T + 0.01, shift))
         route["met"] = "MET02"
         hidden["persistent"] = persistent
@@ -286,7 +320,7 @@ def generate(scenario: str, seed: int) -> Case:
         }
 
     elif scenario == "upstream_clean":
-        start = round(T - rng.uniform(3, 7), 2)
+        start = round(T - rng.uniform(3, 7) * rec, 2)
         w.clean_shift["CLN02"].append((start, float(rng.uniform(16, 21))))
         route["clean"] = "CLN02"
         if confound:
@@ -317,7 +351,7 @@ def generate(scenario: str, seed: int) -> Case:
         }
 
     elif scenario == "sensor_fault":
-        start = round(T - rng.uniform(1.5, 3.5), 2)
+        start = round(T - rng.uniform(1.5, 3.5) * rec, 2)
         w.fdc_step[x].append((start, "heater_temp_C", float(rng.uniform(10, 15)), False))
         route["measured"] = False
         if confound:
@@ -333,7 +367,7 @@ def generate(scenario: str, seed: int) -> Case:
         }
 
     elif scenario == "heater_drift":
-        start = round(T - rng.uniform(1.5, 3.5), 2)
+        start = round(T - rng.uniform(1.5, 3.5) * rec, 2)
         w.fdc_step[x].append((start, "heater_temp_C", float(rng.uniform(10, 14)), True))
         route["measured"] = False
         if confound:
@@ -352,9 +386,10 @@ def generate(scenario: str, seed: int) -> Case:
     lots, pm_log = w.run()
     alarm_lot = lots[-1]
     hidden["world"] = w
+    alarm_key = f"{scenario}{seed}" if level == 0 else f"{scenario}{seed}L{level}"
     if scenario in ("sensor_fault", "heater_drift"):
         alarm = {
-            "alarm_id": f"ALM-{zlib.crc32(f'{scenario}{seed}'.encode()) % 100000:05d}",
+            "alarm_id": f"ALM-{zlib.crc32(alarm_key.encode()) % 100000:05d}",
             "type": "FDC",
             "rule": "heater_temp_C above 403.0 (3 sigma)",
             "chamber": x,
@@ -367,7 +402,7 @@ def generate(scenario: str, seed: int) -> Case:
         m = alarm_lot["measurement"]
         kind = "OOS" if (m["mean"] > USL or m["mean"] < LSL) else "OOC"
         alarm = {
-            "alarm_id": f"ALM-{zlib.crc32(f'{scenario}{seed}'.encode()) % 100000:05d}",
+            "alarm_id": f"ALM-{zlib.crc32(alarm_key.encode()) % 100000:05d}",
             "type": kind,
             "rule": f"wafer mean outside {'spec ' + str(LSL) + '-' + str(USL) if kind == 'OOS' else 'control limits ' + str(LCL) + '-' + str(UCL)}",
             "chamber": x,
@@ -381,7 +416,7 @@ def generate(scenario: str, seed: int) -> Case:
     truth["required"] = [[a, alarm_lot["lot_id"] if t == "ALARM_LOT" else t] for a, t in truth["required"]]
     truth["confounder"] = hidden["confounder"]
     return Case(
-        case_id=f"{scenario}-{seed}",
+        case_id=f"{scenario}-{seed}" if level == 0 else f"{scenario}@L{level}-{seed}",
         scenario=scenario,
         seed=seed,
         lots=lots,
@@ -409,6 +444,10 @@ HOLDOUT3_SEEDS = list(range(9, 19))  # large held-out set (70 alarms), for confi
 
 
 def benchmark(split: str = "dev") -> list:
+    if split.startswith("stress_L"):
+        level = int(split.removeprefix("stress_L"))
+        tag = "" if level == 0 else f"@L{level}"
+        return [f"{s}{tag}-{seed}" for s in SCENARIOS for seed in STRESS_SEEDS]
     seeds = {
         "dev": DEV_SEEDS,
         "holdout": HOLDOUT_SEEDS,
@@ -420,5 +459,6 @@ def benchmark(split: str = "dev") -> list:
 
 
 def load(case_id: str) -> Case:
-    scenario, seed = case_id.rsplit("-", 1)
-    return generate(scenario, int(seed))
+    name, seed = case_id.rsplit("-", 1)
+    scenario, _, level = name.partition("@L")
+    return generate(scenario, int(seed), int(level or 0))

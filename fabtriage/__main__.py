@@ -38,7 +38,7 @@ def main(argv=None) -> None:
     c.add_argument("--split", default="all", choices=["dev", "holdout", "holdout2", "holdout3", "all"])
     e = sub.add_parser("eval")
     e.add_argument("--method", required=True, choices=["agent", "agent_noverify", "oneshot", "playbook", "always_hold"])
-    e.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "holdout3", "all"])
+    e.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "holdout3", "all", "stress_L0", "stress_L1", "stress_L2", "stress_L3"])
     e.add_argument("--backend", default="meta", choices=["meta", "baseten"])
     e.add_argument("--limit", type=int)
     e.add_argument("--only", nargs="*", help="scenario name prefixes, e.g. pm_shift heater_drift")
@@ -50,12 +50,12 @@ def main(argv=None) -> None:
     r.add_argument("--backend", default="meta", choices=["meta", "baseten"])
     rs = sub.add_parser("rescore", help="rebuild a results file from saved runs")
     rs.add_argument("--method", required=True, choices=["agent", "agent_noverify", "oneshot", "playbook", "always_hold"])
-    rs.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "holdout3", "all"])
+    rs.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "holdout3", "all", "stress_L0", "stress_L1", "stress_L2", "stress_L3"])
     im = sub.add_parser("impact", help="per-100-alarm impact under stated assumptions")
     im.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "holdout3", "all"])
     rc = sub.add_parser("recover", help="recovery after PM: bring a held chamber back to target")
-    rc.add_argument("--method", required=True, choices=["agent", "monitor_rule", "reset_recipe", "keep_recipe"])
-    rc.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "holdout3", "all", "linked"])
+    rc.add_argument("--method", required=True, choices=["agent", "monitor_rule", "reset_recipe", "keep_recipe", "oracle"])
+    rc.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "holdout3", "all", "linked", "stress_L0", "stress_L1", "stress_L2", "stress_L3"])
     rc.add_argument("--backend", default="meta", choices=["meta", "baseten"])
     rc.add_argument("--only", nargs="*", help="scenario names, e.g. seasoning fast_drift")
     rc.add_argument("--repeats", type=int, default=1)
@@ -63,6 +63,7 @@ def main(argv=None) -> None:
     rc.add_argument("--hide", nargs="*", default=[], choices=["history", "pm_detail"], help="ablation: hide clues from the agent")
     rr = sub.add_parser("recover-report", help="recovery results and the pre-registered success criteria")
     rr.add_argument("--split", default="holdout", choices=["dev", "holdout", "holdout2", "holdout3", "all"])
+    sw = sub.add_parser("sweep-report", help="accuracy and off-target lots across stress levels")
     rp = sub.add_parser("report", help="confidence intervals for diagnosis and recovery on one split")
     rp.add_argument("--split", default="holdout3", choices=["dev", "holdout", "holdout2", "holdout3"])
     dm = sub.add_parser("demo", help="open the read-only demo from docs/demo; no API key needed")
@@ -127,6 +128,20 @@ def main(argv=None) -> None:
                 print(m[:30].ljust(32) + "".join(str(d["summary"][c]).rjust(16) for c in cols))
             for c in RE.criteria(res):
                 print(("MET  " if c["met"] else "MISS ") + f"{c['criterion']}: {c['value']}")
+    elif args.cmd == "sweep-report":
+        from .stats import sweep
+
+        data = sweep(RUNS)
+        for kind, key, unit in (("diagnosis", "decision_accuracy_pct", "% right"), ("recovery", "off_target_per_recovery", " off-target lots per recovery")):
+            print(kind)
+            for m, levels in data[kind].items():
+                cells = []
+                for lv in levels:
+                    if lv is None:
+                        cells.append("   -   ")
+                    else:
+                        cells.append(f"{lv[key]} [{lv['ci'][0]}, {lv['ci'][1]}]")
+                print(f"  {m:16s} " + "  |  ".join(cells))
     elif args.cmd == "report":
         from .stats import report
 

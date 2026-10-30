@@ -146,3 +146,41 @@ def report(runs_dir: Path, split: str) -> dict:
     data = {"split": split, "diagnosis": diagnosis(runs_dir, split), "recovery": recovery(runs_dir, split)}
     (runs_dir / f"report_{split}.json").write_text(json.dumps(data, indent=2))
     return data
+
+
+def sweep(runs_dir: Path) -> dict:
+    """Per stress level: right-decision rate (diagnosis) and off-target lots per recovery, with 95% intervals."""
+    out = {"levels": [0, 1, 2, 3], "diagnosis": {}, "recovery": {}}
+    for m in ["agent", "oneshot", "playbook", "always_hold"]:
+        row = []
+        for lv in range(4):
+            split = f"stress_L{lv}"
+            reps = _rows(runs_dir, m, split)
+            a = per_case(reps, sim.benchmark(split), lambda r: r["decision_correct"]) if reps else None
+            if a is None:
+                row.append(None)
+                continue
+            lo, hi = boot_ci(a)
+            if a.min() == a.max():
+                lo, hi = wilson(int(np.sum(a == 1.0)), len(a))
+            miss = per_case(reps, sim.benchmark(split), lambda r: r["missed_fault"])
+            row.append({"decision_accuracy_pct": _fmt(a.mean(), True), "ci": [_fmt(lo, True), _fmt(hi, True)], "missed_faults": _fmt(miss.sum()), "n": len(a)})
+        if any(row):
+            out["diagnosis"][m] = row
+    for m in ["agent", "monitor_rule", "reset_recipe", "keep_recipe", "oracle"]:
+        row = []
+        for lv in range(4):
+            split = f"stress_L{lv}"
+            reps = _rows(runs_dir / "recovery", m, split)
+            o = per_case(reps, R.benchmark(split), lambda r: r["off_target_lots"]) if reps else None
+            if o is None:
+                row.append(None)
+                continue
+            lo, hi = boot_ci(o)
+            oos = per_case(reps, R.benchmark(split), lambda r: r["out_of_spec_lots"])
+            mon = per_case(reps, R.benchmark(split), lambda r: r["monitor_wafers"])
+            row.append({"off_target_per_recovery": _fmt(o.mean()), "ci": [_fmt(lo), _fmt(hi)], "out_of_spec": _fmt(oos.sum()), "monitors": _fmt(mon.mean()), "n": len(o)})
+        if any(row):
+            out["recovery"][m] = row
+    (runs_dir / "sweep.json").write_text(json.dumps(out, indent=2))
+    return out

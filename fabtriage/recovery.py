@@ -37,6 +37,8 @@ R_NOM = TARGET / T_NOM  # nominal deposition rate, angstrom per second
 N_LOTS = 40
 LOT_NOISE = 1.5  # lot-to-lot film noise, angstrom
 MET_NOISE = 0.8
+NOISE_SCALE = {0: 1.0, 1: 1.4, 2: 1.8, 3: 2.2}  # stress levels: film and metrology noise multiplier
+STRESS_SEEDS = list(range(19, 24))
 MAX_MONITORS = 4
 MONITOR_DOWNTIME_H = 0.5
 ENGINEER_FALLBACK_H = 2.5  # a refused recovery goes to an engineer
@@ -56,6 +58,10 @@ LINKED_FROM = [f"pm_shift-{s}" for s in sim.DEV_SEEDS]  # recoveries that contin
 def benchmark(split: str = "dev") -> list:
     if split == "linked":
         return [f"rec_after_{d}" for d in LINKED_FROM]
+    if split.startswith("stress_L"):
+        level = int(split.removeprefix("stress_L"))
+        tag = "" if level == 0 else f"@L{level}"
+        return [f"rec_{s}{tag}-{seed}" for s in SCENARIOS for seed in STRESS_SEEDS]
     seeds = {
         "dev": DEV_SEEDS,
         "holdout": HOLDOUT_SEEDS,
@@ -86,10 +92,11 @@ def _rng(case_id: str, stream: str) -> np.random.Generator:
     return np.random.default_rng(zlib.crc32(f"{case_id}/{stream}".encode()))
 
 
-def generate(scenario: str, seed: int) -> RecoveryCase:
+def generate(scenario: str, seed: int, level: int = 0) -> RecoveryCase:
     if scenario not in SCENARIOS:
         raise ValueError(f"unknown scenario {scenario!r}")
-    cid = f"rec_{scenario}-{seed}"
+    cid = f"rec_{scenario}-{seed}" if level == 0 else f"rec_{scenario}@L{level}-{seed}"
+    nscale = NOISE_SCALE[level]
     rng = _rng(cid, "setup")
     chamber = sim.CHAMBERS[int(rng.integers(len(sim.CHAMBERS)))]
     pre_frac = float(rng.uniform(0.962, 0.975))  # rate just before PM, buildup lowered it
@@ -143,7 +150,7 @@ def generate(scenario: str, seed: int) -> RecoveryCase:
         t = round(pre_time * (1 + 0.0006 * (18 - k)), 2)  # the controller has been stretching the time
         frac = pre_frac * (1 + 0.0006 * (18 - k))
         tool = sim.MET_TOOLS[int(rng.integers(2))]
-        y = frac * R_NOM * t + rng.normal(0, LOT_NOISE) + bias[tool] + rng.normal(0, MET_NOISE)
+        y = frac * R_NOM * t + rng.normal(0, LOT_NOISE * nscale) + bias[tool] + rng.normal(0, MET_NOISE * nscale)
         hist.append({"lots_since_last_pm": lots_since_pm, "recipe_time_s": t, "thickness_A": round(float(y), 2), "met_tool": tool})
 
     # earlier PMs on this chamber: one showerhead swap and one skipped seasoning, always present
@@ -179,7 +186,7 @@ def generate(scenario: str, seed: int) -> RecoveryCase:
         "MET02_reads_A": round(500.0 + bias["MET02"] + float(rng.normal(0, 0.15)), 2),
         "checked_hours_ago": round(float(rng.uniform(2, 20)), 1),
     }
-    hidden = {"post_frac": post_frac, "pre_frac": pre_frac, "season": season, "drift": drift, "bias": bias}
+    hidden = {"post_frac": post_frac, "pre_frac": pre_frac, "season": season, "drift": drift, "bias": bias, "noise_scale": nscale}
     return RecoveryCase(cid, scenario, seed, chamber, pm, pre_time, hist, past, matching, truth, hidden)
 
 
@@ -217,7 +224,8 @@ def load(case_id: str) -> RecoveryCase:
             _CACHE[case_id] = generate_linked(case_id.removeprefix("rec_after_"))
         else:
             name, seed = case_id.removeprefix("rec_").rsplit("-", 1)
-            _CACHE[case_id] = generate(name, int(seed))
+            scenario, _, level = name.partition("@L")
+            _CACHE[case_id] = generate(scenario, int(seed), int(level or 0))
     return _CACHE[case_id]
 
 
@@ -237,8 +245,8 @@ def true_thickness(case: RecoveryCase, time_s: float, run_index: int, noise: flo
 
 def _monitor(case: RecoveryCase, time_s: float, run_index: int, met_tool: str) -> tuple:
     r = _rng(case.case_id, f"monitor/{run_index}")
-    true = true_thickness(case, time_s, run_index, float(r.normal(0, 1.0)))
-    measured = true + case.hidden["bias"][met_tool] + float(_rng(case.case_id, f"met/{run_index}/{met_tool}").normal(0, MET_NOISE))
+    true = true_thickness(case, time_s, run_index, float(r.normal(0, 1.0 * case.hidden.get("noise_scale", 1.0))))
+    measured = true + case.hidden["bias"][met_tool] + float(_rng(case.case_id, f"met/{run_index}/{met_tool}").normal(0, MET_NOISE * case.hidden.get("noise_scale", 1.0)))
     return true, measured
 
 
@@ -609,8 +617,9 @@ def check(job: RecoveryJob, r: dict) -> list:
 def run_out(case: RecoveryCase, time_s: float, ewma_lambda: float, drift_ctrl: float, n_monitors: int) -> dict:
     """Run 40 production lots under the EWMA controller, starting from the released recipe."""
     r = _rng(case.case_id, "production")
-    lot_noise = r.normal(0, LOT_NOISE, N_LOTS)
-    met_noise = r.normal(0, MET_NOISE, N_LOTS)
+    k = case.hidden.get("noise_scale", 1.0)
+    lot_noise = r.normal(0, LOT_NOISE * k, N_LOTS)
+    met_noise = r.normal(0, MET_NOISE * k, N_LOTS)
     measured = r.random(N_LOTS) < sim.MEASURE_PROB
     tools = r.integers(0, 2, N_LOTS)
     a = TARGET / time_s  # controller's rate estimate
@@ -719,5 +728,18 @@ def monitor_rule(job: RecoveryJob):
     )
 
 
-BASELINES = {"keep_recipe": keep_recipe, "reset_recipe": reset_recipe, "monitor_rule": monitor_rule}
+def oracle(job: RecoveryJob):
+    """Not a method: it reads the hidden truth and sets the perfect recipe and drift term.
+    What is left over is the noise floor, the off-target lots nobody could avoid."""
+    job.verify_enabled = False
+    h = job.case.hidden
+    job.call("get_recovery_brief", {})
+    t = TARGET / (h["post_frac"] * R_NOM)
+    job.call(
+        "release_chamber",
+        {"time_s": round(t, 2), "drift_A_per_lot": round(h["drift"], 3), "claims": _brief_claims(job), "summary": "oracle"},
+    )
+
+
+BASELINES = {"keep_recipe": keep_recipe, "reset_recipe": reset_recipe, "monitor_rule": monitor_rule, "oracle": oracle}
 METHODS = ["agent", "monitor_rule", "reset_recipe", "keep_recipe"]
