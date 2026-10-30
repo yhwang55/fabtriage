@@ -64,6 +64,10 @@ def main(argv=None) -> None:
     rr = sub.add_parser("recover-report", help="recovery results and the pre-registered success criteria")
     rr.add_argument("--split", default="holdout", choices=["dev", "holdout", "holdout2", "holdout3", "all"])
     sw = sub.add_parser("sweep-report", help="accuracy and off-target lots across stress levels")
+    fb = sub.add_parser("feedback", help="re-investigate the alarms the agent got wrong, with and without an engineer note")
+    fb.add_argument("--split", default="stress_L3", choices=["dev", "holdout", "holdout2", "holdout3", "stress_L0", "stress_L1", "stress_L2", "stress_L3"])
+    fb.add_argument("--backend", default="meta", choices=["meta", "baseten"])
+    fb.add_argument("--resume", action="store_true")
     rp = sub.add_parser("report", help="confidence intervals for diagnosis and recovery on one split")
     rp.add_argument("--split", default="holdout3", choices=["dev", "holdout", "holdout2", "holdout3"])
     dm = sub.add_parser("demo", help="open the read-only demo from docs/demo; no API key needed")
@@ -128,6 +132,12 @@ def main(argv=None) -> None:
                 print(m[:30].ljust(32) + "".join(str(d["summary"][c]).rjust(16) for c in cols))
             for c in RE.criteria(res):
                 print(("MET  " if c["met"] else "MISS ") + f"{c['criterion']}: {c['value']}")
+    elif args.cmd == "feedback":
+        from . import feedback
+
+        client, sam = _clients("agent", args.backend)
+        out = feedback.run(args.split, RUNS, client, args.backend, sam, resume=args.resume)
+        print(json.dumps({k: out[k] for k in ("n", "with_note", "no_note")}, indent=2))
     elif args.cmd == "sweep-report":
         from .stats import sweep
 

@@ -1285,6 +1285,7 @@ function sweepHtml(data) {
     lo: 30, hi: 100, ticks: [40, 60, 80, 100], unit: "%", title: "diagnosis sweep", xnote: L("Evidence gets weaker at each level", "단계가 오를수록 증거가 약해짐"),
     series: {
       agent: { label: L("Agent", "에이전트"), color: "var(--ink)", w: 3 },
+      agent_baseten: { label: L("Agent, open model", "에이전트, 오픈 모델"), color: "var(--release)", w: 2 },
       oneshot: { label: L("No tools", "도구 없음"), color: "var(--slate)", dash: "5 3" },
       playbook: { label: L("Playbook", "고정 규칙"), color: "#8A6100" },
       always_hold: { label: L("Always hold", "무조건 홀드"), color: "var(--muted)", dash: "2 3", noci: true },
@@ -1293,6 +1294,7 @@ function sweepHtml(data) {
     lo: 0, hi: 10, ticks: [0, 2, 4, 6, 8, 10], unit: "", title: "recovery sweep", xnote: L("Film and metrology noise grow at each level", "단계가 오를수록 잡음이 커짐"),
     series: {
       agent: { label: L("Agent", "에이전트"), color: "var(--ink)", w: 3 },
+      agent_baseten: { label: L("Agent, open model", "에이전트, 오픈 모델"), color: "var(--release)", w: 2 },
       monitor_rule: { label: L("Two monitors", "모니터 2장 규칙"), color: "#8A6100" },
       keep_recipe: { label: L("Keep recipe", "레시피 유지"), color: "var(--muted)", dash: "2 3", noci: true },
       oracle: { label: L("Noise floor", "잡음 한계"), color: "var(--slate)", dash: "5 3" },

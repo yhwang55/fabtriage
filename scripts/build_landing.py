@@ -192,6 +192,103 @@ steps = [
     ("Recovery", "The held chamber is brought back: two monitor wafers, a recipe 2.9% shorter, and 40 production lots inside the limits. Keeping the old recipe would have sent 11 of them off target."),
 ]
 
+TOOLS = [
+    ("get_lot_history", "Lot route"), ("get_chamber_summary", "Chambers side by side"), ("run_commonality", "Commonality test"),
+    ("get_trend", "Trend"), ("query_lots", "Lot table"), ("get_pm_log", "PM log"), ("get_fdc_summary", "Sensors (FDC)"),
+    ("request_measurement", "Re-measurement"), ("get_wafer_map", "Wafer map"),
+]
+
+
+def route_section():
+    """Which checks the agent chose, per scenario, over the 70 large-set alarms (run 1)."""
+    rows = []
+    for key, label in SCEN:
+        seqs = []
+        for seed in range(9, 19):
+            path = ROOT / "runs" / "agent" / f"{key}-{seed}" / "run.json"
+            if path.exists():
+                seqs.append([t["tool"] for t in json.loads(path.read_text())["trace"]])
+        if seqs:
+            rows.append((label, seqs))
+    pb = []
+    for key, _ in SCEN:
+        for seed in range(9, 19):
+            path = ROOT / "runs" / "playbook" / f"{key}-{seed}" / "run.json"
+            if path.exists():
+                pb.append([t["tool"] for t in json.loads(path.read_text())["trace"]])
+    if not rows:
+        return ""
+    W, left, colw, rowh, top = 1100, 190, 82, 34, 64
+    H = top + (len(rows) + 1) * rowh + 24
+    W = left + len(TOOLS) * colw + 150
+    svg = [f'<svg viewBox="0 0 {W} {H}" width="100%" role="img" aria-label="For each kind of alarm, how often the agent used each check; the fixed playbook runs the same checks every time" {T} style="display:block; min-width: 900px">']
+    for j, (_, lab) in enumerate(TOOLS):
+        cx = left + j * colw + colw / 2
+        words = lab.split(" ", 1)
+        svg.append(f'<text x="{cx:.0f}" y="22" font-size="12.5" fill="{MUTED}" text-anchor="middle">{words[0]}</text>')
+        if len(words) > 1:
+            svg.append(f'<text x="{cx:.0f}" y="38" font-size="12.5" fill="{MUTED}" text-anchor="middle">{words[1]}</text>')
+    svg.append(f'<text x="{left + len(TOOLS) * colw + 16}" y="38" font-size="12.5" fill="{MUTED}">different paths</text>')
+
+    def draw(i, label, seqs, color, bold):
+        y = top + i * rowh + rowh / 2
+        svg.append(f'<text x="0" y="{y + 5:.0f}" font-size="14" fill="{INK}" font-weight="{600 if bold else 400}">{label}</text>')
+        svg.append(f'<line x1="{left}" x2="{left + len(TOOLS) * colw}" y1="{y:.0f}" y2="{y:.0f}" stroke="{LINE}"/>')
+        for j, (tool, _) in enumerate(TOOLS):
+            share = sum(1 for sq in seqs if tool in sq) / len(seqs)
+            if share > 0:
+                r = 3 + 9 * share ** 0.5
+                svg.append(f'<circle cx="{left + j * colw + colw / 2:.0f}" cy="{y:.0f}" r="{r:.1f}" fill="{color}"><title>{label}: used in {round(share * 100)}% of alarms</title></circle>')
+        distinct = len({tuple(sq) for sq in seqs})
+        svg.append(f'<text x="{left + len(TOOLS) * colw + 16}" y="{y + 5:.0f}" font-size="14" fill="{INK}">{distinct} of {len(seqs)}</text>')
+
+    for i, (label, seqs) in enumerate(rows):
+        draw(i, label, seqs, INK, False)
+    draw(len(rows), "Fixed playbook", pb, AMBERD, True)
+    svg.append("</svg>")
+    return f'''<section style="display: flex; flex-direction: column; gap: 22px">
+<h2 style="{HD}; font-weight: 700; font-size: 40px; margin: 0">It picks its checks for the alarm in front of it</h2>
+<p style="margin: 0; font-size: 18px; line-height: 1.5; max-width: 66ch">Each row is one kind of alarm, ten alarms each. A bigger dot means the agent used that check on more of them. For a suspected metrology misread it asks for a re-measurement; for a sensor alarm it goes to the sensors and the film trend and skips the commonality test. Almost no two alarms got the same path. The fixed playbook, in the last row, runs the same checks in the same order every time.</p>
+<div style="background: {PANEL}; padding: 24px; overflow-x: auto">{"".join(svg)}</div>
+</section>'''
+
+
+def cost_section():
+    path = ROOT / "docs" / "demo" / "data" / "benchmark.json"
+    if not path.exists():
+        return ""
+    imp = json.loads(path.read_text()).get("holdout3_impact") or {}
+    m = imp.get("methods") or {}
+    order = [("agent", "Agent"), ("oneshot", "No tools"), ("playbook", "Fixed playbook"), ("always_hold", "Hold everything")]
+    order = [(k, l) for k, l in order if k in m]
+    if not order:
+        return ""
+    metrics = [("engineer_hours", "Engineer hours", 260), ("needless_holds", "Needless holds", 60), ("lots_at_risk", "Lots at risk from missed faults", 30)]
+    blocks = []
+    for key, title, top in metrics:
+        W, left, rowh = 400, 150, 32
+        H = len(order) * rowh + 10
+        bw = W - left - 60
+        svg = [f'<svg viewBox="0 0 {W} {H}" width="100%" role="img" aria-label="{title} per 100 alarms by method" {T} style="display:block">']
+        for i, (k, lab) in enumerate(order):
+            v = m[k].get(key, 0) or 0
+            y = 6 + i * rowh
+            col = INK if k == "agent" else ("#9AA6A4" if k != "playbook" else AMBERD)
+            svg.append(f'<text x="0" y="{y + 16}" font-size="15" fill="{INK}" font-weight="{600 if k == "agent" else 400}">{lab}</text>')
+            svg.append(f'<rect x="{left}" y="{y + 3}" width="{max(1.5, bw * min(v, top) / top):.1f}" height="18" fill="{col}"/>')
+            svg.append(f'<text x="{left + max(1.5, bw * min(v, top) / top) + 6:.1f}" y="{y + 17}" font-size="15" fill="{INK}">{round(v, 1):g}</text>')
+        svg.append("</svg>")
+        blocks.append(f'<figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="{HD}; font-weight: 600; font-size: 20px">{title}</figcaption>{"".join(svg)}</figure>')
+    a = imp.get("assumptions", {})
+    note = ", ".join(f"{v['value']} for {k.replace('_', ' ')}" for k, v in a.items())
+    return f'''<section style="display: flex; flex-direction: column; gap: 22px">
+<h2 style="{HD}; font-weight: 700; font-size: 40px; margin: 0">What 100 alarms would cost</h2>
+<p style="margin: 0; font-size: 18px; line-height: 1.5; max-width: 66ch">Scaled from the 70-alarm set under stated assumptions. Holding everything is safe but costs about 250 engineer hours and a needless hold on more than half the alarms. The fixed playbook and the agent take the same review time, about 17 engineer hours to read and sign off 100 dispositions, but the playbook lets real faults through: about 23 lots at risk. The agent had no needless holds and no missed faults on this set.</p>
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 28px">{"".join(blocks)}</div>
+<p style="margin: 0; font-size: 13px; line-height: 1.5; color: {MUTED}">Assumptions: {note}. Practitioner input and our own estimates; see the README.</p>
+</section>'''
+
+
 def verifier_section():
     cards = verifier_cards()
     if not cards:
@@ -250,7 +347,9 @@ def main_page():
 <div><div style="{HD}; font-weight: 700; font-size: 44px">0.23</div><p style="margin: 4px 0 0; font-size: 16px; line-height: 1.45">off-target lots per recovery over 50 recoveries. The best guide rule: 1.86.</p></div>
 </div>
 </section>
+{route_section()}
 {verifier_section()}
+{cost_section()}
 <section style="display: flex; flex-direction: column; gap: 22px">
 <h2 style="{HD}; font-weight: 700; font-size: 40px; margin: 0">Where it breaks</h2>
 <p style="margin: 0; font-size: 18px; line-height: 1.5; max-width: 66ch">Faults keep their size while the evidence gets weaker: noisier film, fewer measured lots, faults that began more recently. The agent holds up through level 2. At level 3 its lead is gone, but it fails safe: no missed faults, more needless holds.</p>

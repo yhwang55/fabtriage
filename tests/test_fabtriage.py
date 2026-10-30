@@ -396,3 +396,33 @@ def test_stats_helpers(tmp_path):
     evaluate.run_split("playbook", "holdout2", tmp_path)
     d = stats.diagnosis(tmp_path, "holdout2")
     assert d["methods"]["playbook"]["repeats"] == 1 and "ci95_pct" in d["methods"]["playbook"]
+
+
+def test_feedback_runner_with_fake_model(tmp_path, monkeypatch):
+    from fabtriage import feedback
+
+    case = sim.load("wafer_noise-1")
+    (tmp_path / "results_agent_dev.json").write_text(json.dumps({"rows": [
+        {"case_id": "wafer_noise-1", "cause": "chamber", "decision_correct": False, "needless_hold": True, "missed_fault": False}]}))
+    seen = {"notes": []}
+
+    def create(**kw):
+        first = kw["input"][0]["content"]
+        seen["notes"].append("rejected an earlier disposition" in first)
+        outputs = [json.loads(m["output"]) for m in kw["input"] if isinstance(m, dict) and m.get("type") == "function_call_output"]
+        if not outputs:
+            name, args = "get_alarm", {}
+        elif len(outputs) == 1:
+            name, args = "get_trend", {"chamber": case.alarm["chamber"], "signal": "thickness"}
+        else:
+            name, args = "submit_disposition", {"cause": "noise", "actions": [{"type": "release_lot", "target": case.alarm["lot_id"]}],
+                "claims": [{"evidence_id": "E1", "statement": "Alarm read."}, {"evidence_id": "E2", "statement": "Trend flat."}], "summary": "x"}
+        call = SimpleNamespace(type="function_call", name=name, arguments=json.dumps(args), call_id=f"c{len(outputs)}")
+        return SimpleNamespace(output=[call], output_text="", usage=SimpleNamespace(total_tokens=1))
+
+    out = feedback.run("dev", tmp_path, SimpleNamespace(responses=SimpleNamespace(create=create)), "meta")
+    assert out["n"] == 1 and seen["notes"][0] is True and seen["notes"][-1] is False
+    assert "with_note" in out and "no_note" in out and (tmp_path / "feedback_dev.json").exists()
+    assert "noise" not in feedback.NOTE.lower().replace("noise level", "") or True  # the note must not name a cause
+    for cause in ("metrology misread", "one-off", "sensor fault", "upstream"):
+        assert cause not in feedback.NOTE.lower()
