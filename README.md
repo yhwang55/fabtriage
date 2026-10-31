@@ -28,7 +28,7 @@ alarm ──> Muse Spark agent ──picks one tool per turn──> investigatio
 - **Virtual fab** (`fabtriage/sim.py`): CLEAN (2 tools) → CVD DEP (4 chambers on 2 tools) → MET (2 tools). 72 hours of history, about half the lots sampled at 49 sites, FDC sensors on every run, chamber buildup drift, PM resets, run-to-run compensation.
 - **Tools** (`fabtriage/tools.py`): alarm, lot history, lot table query, chamber box-plot summary, trends, commonality analysis (ANOVA per step), FDC summary, PM log, re-measurement (costs lot delay), and a wafer map segmented by **SAM 3.1**. All numbers are computed in code; the model decides what to look at.
 - **Verification** (`fabtriage/verify.py`): runs inside `submit_disposition`, so the agent can't skip it. Every claim must cite an evidence id and every number in it must appear in that evidence. Playbook rules apply too, for example an out-of-spec lot can't be released without an in-spec re-measurement. It never sees the ground truth.
-- **Models**: Muse Spark 1.3 (Meta Model API) runs the agent; SAM 3.1 reads wafer maps; Muse Voice Transcribe turns spoken sign-off notes into text; Muse Spark Open on Baseten runs the same agent on open weights.
+- **Models**: Muse Spark 1.3 (Meta Model API) runs the agent; SAM 3.1 reads wafer maps; Muse Spark Open on Baseten runs the same agent on open weights.
 
 ## Benchmark
 
@@ -71,6 +71,7 @@ paired on the same cases. All six criteria were met.
 | Diagnosis, 70 alarms | Right decision | 95% interval | Missed real faults | Needless holds |
 | --- | --- | --- | --- | --- |
 | **Agent, Muse Spark 1.3 (3 runs)** | **100%** | 94.8 to 100 | **0** | **0** |
+| Agent, Muse Spark Open on Baseten (1 run) | 94.3% | 88.6 to 98.6 | 1 | 0 |
 | Agent without the verifier (1 run) | 100% | 94.8 to 100 | 0 | 0 |
 | Same model, one shot, no tools (1 run) | 94.3% | 88.6 to 98.6 | 1 | 3 |
 | Fixed playbook | 78.6% | 68.6 to 87.1 | 8 | 7 |
@@ -82,11 +83,15 @@ tools, 5.7 points (1.4 to 11.4). Without the verifier the decisions were just as
 of 70 dispositions did not cite the evidence the playbook requires (13 blamed the chamber
 without a cited chamber comparison, 3 blamed the clean step without a commonality test, 3
 called a wafer a one-off without the chamber's history). With the verifier on, those are sent
-back until the evidence is there; none got through.
+back until the evidence is there; none got through. The open-weights model's 4 misses were
+all the same kind: it ran out of turns (20) without filing a disposition, and the console
+sends those to an engineer unresolved; it never filed a wrong one. One of the four was a real
+upstream fault, which is why it counts one missed fault.
 
 | Recovery, 50 recoveries | Off-target lots per recovery | 95% interval | Out-of-spec lots | Monitor wafers |
 | --- | --- | --- | --- | --- |
 | **Agent, Muse Spark 1.3 (3 runs)** | **0.23** | 0.08 to 0.42 | **0** | 1.66 |
+| Agent, Muse Spark Open on Baseten (1 run) | 0.20 | 0.04 to 0.40 | 0 | 2.6 |
 | Two monitor wafers (guide rule) | 1.86 | 1.22 to 2.58 | 0 | 2.0 |
 | Back to the baseline recipe | 2.56 | 1.78 to 3.40 | 16 | 0 |
 | Keep the pre-PM recipe | 4.90 | 3.86 to 5.94 | 59 | 0 |
@@ -99,22 +104,38 @@ offset case described below.
 
 A perfect score on 70 alarms says little about margin, so the last test weakens the evidence
 step by step (noisier film, fewer measured lots, faults that began more recently) and keeps
-fault sizes the same. Plan written first: [docs/STRESS.md](docs/STRESS.md).
+fault sizes the same. Plan written first: [docs/STRESS.md](docs/STRESS.md). The agent ran
+three times per level; the other columns once.
 
-| Level | Diagnosis: agent | No tools | Playbook | Recovery: agent | Two-monitor rule | Oracle |
-| --- | --- | --- | --- | --- | --- | --- |
-| 0 | 97.1% | 97.1% | 88.6% | 0.32 | 3.04 | 0.56 |
-| 1 | 100% | 80.0% | 71.4% | 0.68 | 3.64 | 0.80 |
-| 2 | 94.3% | 62.9% | 68.6% | 1.80 | 4.68 | 1.52 |
-| 3 | 68.6% | 54.3% | 65.7% | 3.16 | 5.48 | 3.28 |
+| Level | Diagnosis: agent (3 runs) | Open model | No tools | Playbook | Recovery: agent (3 runs) | Open model | Two-monitor rule | Oracle |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 0 | 98.1% | 94.3% | 97.1% | 88.6% | 0.29 | 0.36 | 3.04 | 0.56 |
+| 1 | 97.1% | 97.1% | 80.0% | 71.4% | 0.68 | 0.84 | 3.64 | 0.80 |
+| 2 | 96.2% | 85.7% | 62.9% | 68.6% | 1.80 | 1.72 | 4.68 | 1.52 |
+| 3 | 68.6% | 62.9% | 54.3% | 65.7% | 3.25 | 3.56 | 5.48 | 3.28 |
 
 Diagnosis is right decisions (35 alarms per level); recovery is off-target lots per
-recovery (25 per level). The agent holds up through level 2 while the playbook and the
-no-tools model fall off; at level 3 its lead over the playbook is gone (+2.9 points, interval
-spans zero). It fails safe: 0 missed faults at level 3 against the playbook's 4, but 11
-needless holds. In recovery it stays well below the guide rule and close to the oracle at
-every level, but it did not run more monitor wafers as noise grew, which is the next thing
-to fix.
+recovery (25 per level). The agent holds up through level 2, ahead of the playbook by 9.5,
+25.7 and 27.6 points (every paired interval above zero), while the playbook and the no-tools
+model fall off. At level 3 its lead is gone (+2.9, interval spans zero) and the result is the
+same in all three runs: 68.6%. It fails safe: 0, 0 and 1 missed faults at level 3 against the
+playbook's 4, but 10 or 11 needless holds per run, mostly the same alarms each time. In
+recovery it stays well below the guide rule and close to the oracle at every level with no
+out-of-spec lots, but it did not run more monitor wafers as noise grew. A second version of
+the prompt that asks for a second agreeing wafer was tested on fresh seeds
+([docs/RECOVERY_V2.md](docs/RECOVERY_V2.md)): it spent the wafers and gained almost nothing
+(2.52 against 2.64 lots per recovery at level 3, interval spans zero), because at high noise
+the plain agent already sits on the oracle. What is left is the production controller, whose
+weight the agent may set and almost never does. That is the next thing to work on.
+
+**What a send-back does.** Engineers will reject some dispositions, so we took the 11 alarms
+the agent got wrong at level 3 and investigated each again, once with a short engineer note
+("not approved; check the film directly before holding equipment", never naming the answer)
+and once with nothing. Without the note all 11 came back wrong again; with it, 3 were fixed,
+both metrology misreads among them, at the cost of 0.6 more re-measurements per alarm. One
+note pushed the agent toward releasing an out-of-spec lot and the verifier blocked it. A
+send-back works when it names a check that settles the question; it cannot supply evidence
+that is not there ([docs/FEEDBACK.md](docs/FEEDBACK.md)).
 
 ### Fresh held-out set, after the fix (14 cases)
 
@@ -148,7 +169,7 @@ Development set (28 cases): agent 100%, fixed playbook 86% (2 missed faults), al
 
 - **Investigating beats answering.** The same model given a fixed evidence pack and one shot at the answer was right 71% and 93% of the time on the two held-out sets, and broke a playbook rule in 4 of those 28 cases (on the development set, it released out-of-spec lots without a confirming re-measurement five times). The agent asks for a re-measurement when the answer depends on it.
 - **The verifier keeps evidence complete; it did not change accuracy here.** Without it the agent made the same decisions, but 1 of 14 and 4 of 14 dispositions would have reached the engineer missing evidence the playbook requires (for example, holding a chamber without citing a comparison to the other chambers). Muse Spark never cited a number that was not in its tool output.
-- **Open weights work too.** Muse Spark Open on Baseten matched the accuracy on the fresh set but used about 40% more tool calls and re-measurements.
+- **Open weights work too, with a gap.** Muse Spark Open on Baseten matched the accuracy on the fresh 14-case set; on the 70-alarm set it was 94.3% against 100%, and under stress it fell further behind at the two hardest levels. It uses more tool calls, re-measurements and monitor wafers. Its recoveries are as good.
 - **The cost.** The agent does slightly more re-measuring than the playbook on the fresh set (1.18 vs 1.07 lot-hours per alarm) in exchange for zero missed faults instead of three.
 
 ### Per 100 alarms (fresh held-out set, illustrative)
@@ -220,7 +241,9 @@ The agent brought all four back with no off-target lots, using 1 or 2 monitor wa
 (Muse Spark 1.3, measured over the benchmark runs). At $1.25 per million input tokens and
 $4.25 per million output tokens, that is under $0.25 per alarm and under $0.15 per recovery
 even if every token were billed at the output price; most tokens are input, so the real figure
-is closer to $0.07 and $0.05.
+is closer to $0.07 and $0.05. Wall time over the benchmark runs: a diagnosis takes about 22
+seconds (median; the open model on Baseten about 27) and a recovery about 31 seconds, with a
+long tail when the API rate-limits and the client retries.
 
 ```bash
 python -m fabtriage recover --method monitor_rule --split holdout
@@ -258,7 +281,7 @@ Each run writes `runs/<method>/<case>/run.json` with the full trace, refusals, c
 
 ## Demo site
 
-`python -m fabtriage export --out docs/demo` writes the console as a static, read-only site from the saved runs; GitHub Pages serves it from `docs/`. It has the alarm queue, every investigation with a step-by-step replay, the side-by-side comparison and the benchmark. Live investigations, sign-off and voice notes need an API key, so they run in the local version:
+`python -m fabtriage export --out docs/demo` writes the console as a static, read-only site from the saved runs; GitHub Pages serves it from `docs/`. It has the alarm queue, every investigation with a step-by-step replay, the side-by-side comparison and the benchmark. Live investigations and sign-off need an API key, so they run in the local version:
 
 ```bash
 cp .env.example .env    # add your MODEL_API_KEY
@@ -273,7 +296,7 @@ The front page (`docs/index.html`) is generated from the same saved results: `py
 python -m fabtriage serve     # http://127.0.0.1:8770
 ```
 
-The first screen is the alarm queue: what needs an engineer, then proposed holds, then proposed releases. Open an alarm to see the verdict card (decision, cause, the evidence behind it, sign-off) and, below it, the investigation step by step: each tool call with its evidence id, the agent's reasoning, verifier refusals, the final disposition with every claim linked back to its evidence, the chamber's SPC chart and the SAM-segmented wafer maps. An engineer approves the disposition, or rejects it with a note and the agent investigates again with that note. The note can be spoken: the console records it and Muse Voice Transcribe turns it into text, because typing in cleanroom gloves is slow. The Benchmark tab compares the agent with the baselines.
+The first screen is the alarm queue: what needs an engineer, then proposed holds, then proposed releases. Open an alarm to see the verdict card (decision, cause, the evidence behind it, sign-off) and, below it, the investigation step by step: each tool call with its evidence id, the agent's reasoning, verifier refusals, the final disposition with every claim linked back to its evidence, the chamber's SPC chart and the SAM-segmented wafer maps. An engineer approves the disposition, or rejects it with a note and the agent investigates again with that note. The Benchmark tab compares the agent with the baselines.
 
 ## Scope note
 

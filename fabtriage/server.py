@@ -20,7 +20,7 @@ from .client import has_key, make_client
 
 WEB = Path(__file__).parent / "web"
 RUNS = Path("runs")
-METHODS = ["agent", "playbook", "always_hold", "agent_noverify", "oneshot", "agent_baseten"]
+METHODS = ["agent", "playbook", "always_hold", "agent_noverify", "oneshot", "agent_baseten", "agent_llama"]
 _live: dict = {}  # case_id -> thread
 _lock = threading.Lock()
 
@@ -125,6 +125,8 @@ def benchmark() -> dict:
     out["recovery"] = recovery_benchmark()
     sw = RUNS / "sweep.json"
     out["sweep"] = json.loads(sw.read_text()) if sw.exists() else None
+    sw2 = RUNS / "sweep_stress2.json"
+    out["sweep2"] = json.loads(sw2.read_text()) if sw2.exists() else None
     out["report"] = {}
     for split in ("holdout3",):
         path = RUNS / f"report_{split}.json"
@@ -134,7 +136,7 @@ def benchmark() -> dict:
 
 
 # ---------------------------------------------------------------- recovery after PM
-REC_METHODS = ["agent", "agent_baseten", "monitor_rule", "reset_recipe", "keep_recipe"]
+REC_METHODS = ["agent", "agent_baseten", "agent_llama", "monitor_rule", "reset_recipe", "keep_recipe"]
 
 
 def recovery_cases() -> list:
@@ -295,18 +297,14 @@ class Handler(BaseHTTPRequestHandler):
     def do_POST(self):
         url = urlparse(self.path)
         length = int(self.headers.get("Content-Length") or 0)
-        if length > 32 * 1024 * 1024:
-            return self._json({"error": "recording too large"}, 413)
+        if length > 1024 * 1024:
+            return self._json({"error": "request too large"}, 413)
         raw = self.rfile.read(length)
         try:
-            body = json.loads(raw or b"{}") if url.path != "/api/transcribe" else {}
+            body = json.loads(raw or b"{}")
             if url.path == "/api/live":
                 sim.load(body["case"])
                 return self._json(start_live(body["case"], body.get("engineer_note")))
-            if url.path == "/api/transcribe":
-                from .voice import transcribe
-
-                return self._json(transcribe(raw))
             if url.path == "/api/signoff":
                 return self._json(signoff(body["method"], body["case"], body["decision"], body.get("note", "")))
             self._json({"error": "not found"}, 404)

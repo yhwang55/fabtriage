@@ -19,8 +19,8 @@ from . import recovery as R
 from . import sim
 
 B = 10_000
-DIAG_METHODS = ["agent", "agent_baseten", "agent_noverify", "oneshot", "playbook", "always_hold"]
-REC_METHODS = ["agent", "agent_baseten", "agent_hide-history", "agent_hide-pm_detail", "agent_hide-history-pm_detail",
+DIAG_METHODS = ["agent", "agent_baseten", "agent_llama", "agent_noverify", "oneshot", "playbook", "always_hold"]
+REC_METHODS = ["agent", "agent_baseten", "agent_llama", "agent_hide-history", "agent_hide-pm_detail", "agent_hide-history-pm_detail",
                "monitor_rule", "reset_recipe", "keep_recipe"]
 
 
@@ -148,13 +148,13 @@ def report(runs_dir: Path, split: str) -> dict:
     return data
 
 
-def sweep(runs_dir: Path) -> dict:
+def sweep(runs_dir: Path, prefix: str = "stress") -> dict:
     """Per stress level: right-decision rate (diagnosis) and off-target lots per recovery, with 95% intervals."""
-    out = {"levels": [0, 1, 2, 3], "diagnosis": {}, "recovery": {}}
-    for m in ["agent", "agent_baseten", "oneshot", "playbook", "always_hold"]:
+    out = {"levels": [0, 1, 2, 3], "prefix": prefix, "diagnosis": {}, "recovery": {}}
+    for m in ["agent", "agent_baseten", "agent_llama", "oneshot", "playbook", "always_hold"]:
         row = []
         for lv in range(4):
-            split = f"stress_L{lv}"
+            split = f"{prefix}_L{lv}"
             reps = _rows(runs_dir, m, split)
             a = per_case(reps, sim.benchmark(split), lambda r: r["decision_correct"]) if reps else None
             if a is None:
@@ -167,10 +167,10 @@ def sweep(runs_dir: Path) -> dict:
             row.append({"decision_accuracy_pct": _fmt(a.mean(), True), "ci": [_fmt(lo, True), _fmt(hi, True)], "missed_faults": _fmt(miss.sum()), "n": len(a)})
         if any(row):
             out["diagnosis"][m] = row
-    for m in ["agent", "agent_baseten", "monitor_rule", "reset_recipe", "keep_recipe", "oracle"]:
+    for m in ["agent", "agent_v2", "agent_baseten", "agent_llama", "monitor_rule", "reset_recipe", "keep_recipe", "oracle"]:
         row = []
         for lv in range(4):
-            split = f"stress_L{lv}"
+            split = f"{prefix}_L{lv}"
             reps = _rows(runs_dir / "recovery", m, split)
             o = per_case(reps, R.benchmark(split), lambda r: r["off_target_lots"]) if reps else None
             if o is None:
@@ -182,5 +182,5 @@ def sweep(runs_dir: Path) -> dict:
             row.append({"off_target_per_recovery": _fmt(o.mean()), "ci": [_fmt(lo), _fmt(hi)], "out_of_spec": _fmt(oos.sum()), "monitors": _fmt(mon.mean()), "n": len(o)})
         if any(row):
             out["recovery"][m] = row
-    (runs_dir / "sweep.json").write_text(json.dumps(out, indent=2))
+    (runs_dir / ("sweep.json" if prefix == "stress" else f"sweep_{prefix}.json")).write_text(json.dumps(out, indent=2))
     return out

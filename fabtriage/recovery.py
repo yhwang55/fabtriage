@@ -39,6 +39,7 @@ LOT_NOISE = 1.5  # lot-to-lot film noise, angstrom
 MET_NOISE = 0.8
 NOISE_SCALE = {0: 1.0, 1: 1.4, 2: 1.8, 3: 2.2}  # stress levels: film and metrology noise multiplier
 STRESS_SEEDS = list(range(19, 24))
+STRESS2_SEEDS = list(range(24, 29))  # fresh seeds for checking a fix that came from reading stress results
 MAX_MONITORS = 4
 MONITOR_DOWNTIME_H = 0.5
 ENGINEER_FALLBACK_H = 2.5  # a refused recovery goes to an engineer
@@ -58,10 +59,11 @@ LINKED_FROM = [f"pm_shift-{s}" for s in sim.DEV_SEEDS]  # recoveries that contin
 def benchmark(split: str = "dev") -> list:
     if split == "linked":
         return [f"rec_after_{d}" for d in LINKED_FROM]
-    if split.startswith("stress_L"):
-        level = int(split.removeprefix("stress_L"))
+    if split.startswith("stress_L") or split.startswith("stress2_L"):
+        fresh = split.startswith("stress2")
+        level = int(split.split("_L")[1])
         tag = "" if level == 0 else f"@L{level}"
-        return [f"rec_{s}{tag}-{seed}" for s in SCENARIOS for seed in STRESS_SEEDS]
+        return [f"rec_{s}{tag}-{seed}" for s in SCENARIOS for seed in (STRESS2_SEEDS if fresh else STRESS_SEEDS)]
     seeds = {
         "dev": DEV_SEEDS,
         "holdout": HOLDOUT_SEEDS,
@@ -353,6 +355,19 @@ How to work
   wafer confirmed the rate, and caps one recipe change at 8% of the pre-PM time.
 - Write claims and the summary in plain words an engineer can check in seconds.
 """
+
+
+# Variant prompt (method agent_v2): one extra rule about noisy monitor wafers. Added after the
+# stress test showed the agent kept using 1.8 monitor wafers however noisy the film got.
+SYSTEM_V2 = SYSTEM.replace(
+    "- Each monitor wafer costs 0.5 h of chamber time; at most 4.",
+    "- Each monitor wafer costs 0.5 h of chamber time; at most 4.\n"
+    "- Monitor wafers are noisy, and the noise varies from chamber to chamber. Before you release on a\n"
+    "  rate estimate, make sure it rests on at least two monitor wafers that agree within 4 A at the same\n"
+    "  recipe time. If they disagree by more, or your estimate rests on one wafer and moves the recipe\n"
+    "  more than 2%, run another monitor wafer first. A third wafer is cheaper than 40 off-target lots.",
+)
+assert SYSTEM_V2 != SYSTEM
 
 
 class RecoveryJob:

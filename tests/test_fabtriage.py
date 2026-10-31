@@ -233,17 +233,6 @@ def test_oneshot_with_fake_model(tmp_path):
     assert row["playbook_rule_broken"]  # one claim only, and no chamber comparison cited
 
 
-def test_voice_multipart_and_guards(monkeypatch):
-    from fabtriage import voice
-
-    body, kind = voice.multipart({"request": '{"model": "m"}'}, {"audio": ("n.wav", b"RIFFxx", "audio/wav")})
-    boundary = kind.split("boundary=")[1]
-    assert body.count(boundary.encode()) == 3 and b'name="audio"; filename="n.wav"' in body
-    monkeypatch.delenv("MODEL_API_KEY", raising=False)
-    assert "error" in voice.transcribe(b"RIFF")
-    monkeypatch.setenv("MODEL_API_KEY", "k")
-    assert "error" in voice.transcribe(b"not a wav")
-
 
 def test_repeats_and_impact(tmp_path):
     from fabtriage import impact

@@ -16,7 +16,7 @@ from pathlib import Path
 
 from . import recovery as R
 
-MODEL_METHODS = ("agent",)
+MODEL_METHODS = ("agent", "agent_v2")
 
 
 def _label(method, backend, hide=()):
@@ -35,9 +35,11 @@ def run_one(method, case_id, runs_dir: Path, client=None, backend=None, autosave
     job.live_extra = {"method": label, "live": True}
     extra = {}
     t0 = time.time()
-    if method == "agent":
+    if method in ("agent", "agent_v2"):
         from .agent import run_agent
 
+        if method == "agent_v2":
+            job.SYSTEM = R.SYSTEM_V2
         extra.update(run_agent(job, client, backend=backend))
     else:
         R.BASELINES[method](job)
@@ -129,12 +131,12 @@ def run_repeats(method, split, runs_dir: Path, repeats: int, client=None, backen
     return out
 
 
-ABLATIONS = ["agent_hide-history", "agent_hide-pm_detail", "agent_hide-history-pm_detail"]
+ABLATIONS = ["agent_v2", "agent_hide-history", "agent_hide-pm_detail", "agent_hide-history-pm_detail"]
 
 
 def load_results(runs_dir: Path, split: str) -> dict:
     out = {}
-    for m in ["agent", "agent_baseten", *ABLATIONS, "monitor_rule", "reset_recipe", "keep_recipe"]:
+    for m in ["agent", "agent_baseten", "agent_llama", *ABLATIONS, "monitor_rule", "reset_recipe", "keep_recipe"]:
         path = runs_dir / f"results_{m}_{split}.json"
         if path.exists():
             data = json.loads(path.read_text())

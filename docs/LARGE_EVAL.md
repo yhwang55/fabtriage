@@ -68,5 +68,14 @@ limit described in RECOVERY.md) and 5 from `seasoning`.
 The clue-removal check, repeated to three runs per condition, met its criteria in every
 condition (see RECOVERY.md).
 
+Open-weights model (Muse Spark Open on Baseten, one run on the same set): 94.3% right
+decisions (88.6 to 98.6), 5.7 points below Muse Spark 1.3 (paired interval 1.4 to 11.4). Its
+4 misses were all runs that hit the 20-turn limit without filing a disposition
+(`metrology_error-14`, `upstream_clean-10`, `wafer_noise-14`, `wafer_noise-15`); one of them
+was a real upstream fault, so it counts one missed fault. In recovery: 0.20 off-target lots
+per recovery (0.04 to 0.40), no out-of-spec lots, 2.6 monitor wafers per recovery against
+1.66.
+
 Token use: about 3.7 million tokens per full diagnosis run (53 thousand per alarm) and 35
-thousand per recovery.
+thousand per recovery. Wall time, median over all benchmark runs: 22 seconds per diagnosis
+(27 on Baseten) and 31 seconds per recovery.

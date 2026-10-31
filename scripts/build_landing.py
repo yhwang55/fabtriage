@@ -134,10 +134,10 @@ def sweep_chart(kind, W=520, H=250):
     P = {"l": 44, "r": 120, "t": 14, "b": 30}
     if kind == "diagnosis":
         key, lo, hi, ticks, unit = "decision_accuracy_pct", 40, 100, [40, 60, 80, 100], "%"
-        series = [("agent", "Agent", INK, 3, ""), ("oneshot", "No tools", SLATE, 2, "5 3"), ("playbook", "Playbook", AMBERD, 2, "")]
+        series = [("agent", "Agent", INK, 3, ""), ("agent_baseten", "Open weights", REL, 2, "2 3"), ("oneshot", "No tools", SLATE, 2, "5 3"), ("playbook", "Playbook", AMBERD, 2, "")]
     else:
         key, lo, hi, ticks, unit = "off_target_per_recovery", 0, 8, [0, 2, 4, 6, 8], ""
-        series = [("agent", "Agent", INK, 3, ""), ("monitor_rule", "Two-monitor rule", AMBERD, 2, ""), ("oracle", "Noise floor", SLATE, 2, "5 3")]
+        series = [("agent", "Agent", INK, 3, ""), ("agent_baseten", "Open weights", REL, 2, "2 3"), ("monitor_rule", "Two-monitor rule", AMBERD, 2, ""), ("oracle", "Noise floor", SLATE, 2, "5 3")]
     data = sweep[kind]
     x = lambda i: P["l"] + i / 3 * (W - P["l"] - P["r"])
     y = lambda v: P["t"] + (1 - (v - lo) / (hi - lo)) * (H - P["t"] - P["b"])
@@ -352,7 +352,7 @@ def main_page():
 {cost_section()}
 <section style="display: flex; flex-direction: column; gap: 22px">
 <h2 style="{HD}; font-weight: 700; font-size: 40px; margin: 0">Where it breaks</h2>
-<p style="margin: 0; font-size: 18px; line-height: 1.5; max-width: 66ch">Faults keep their size while the evidence gets weaker: noisier film, fewer measured lots, faults that began more recently. The agent holds up through level 2. At level 3 its lead is gone, but it fails safe: no missed faults, more needless holds.</p>
+<p style="margin: 0; font-size: 18px; line-height: 1.5; max-width: 66ch">Faults keep their size while the evidence gets weaker: noisier film, fewer measured lots, faults that began more recently. The agent (three runs per level) holds up through level 2. At level 3 its lead is gone, but it fails safe: almost no missed faults, more needless holds. The open-weights model runs the same agent a few points behind.</p>
 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 32px">
 <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="{HD}; font-weight: 600; font-size: 20px">Diagnosis, right decisions</figcaption><div style="overflow-x: auto">{sweep_chart("diagnosis")}</div></figure>
 <figure style="margin: 0; display: flex; flex-direction: column; gap: 8px"><figcaption style="{HD}; font-weight: 600; font-size: 20px">Recovery, off-target lots per recovery</figcaption><div style="overflow-x: auto">{sweep_chart("recovery")}</div></figure>

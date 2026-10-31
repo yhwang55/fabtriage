@@ -39,7 +39,7 @@ def main(argv=None) -> None:
     e = sub.add_parser("eval")
     e.add_argument("--method", required=True, choices=["agent", "agent_noverify", "oneshot", "playbook", "always_hold"])
     e.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "holdout3", "all", "stress_L0", "stress_L1", "stress_L2", "stress_L3"])
-    e.add_argument("--backend", default="meta", choices=["meta", "baseten"])
+    e.add_argument("--backend", default="meta", choices=["meta", "baseten", "llama"])
     e.add_argument("--limit", type=int)
     e.add_argument("--only", nargs="*", help="scenario name prefixes, e.g. pm_shift heater_drift")
     e.add_argument("--repeats", type=int, default=1, help="run the split this many times and report mean and spread")
@@ -47,16 +47,16 @@ def main(argv=None) -> None:
     r = sub.add_parser("run")
     r.add_argument("--case", required=True)
     r.add_argument("--method", default="agent", choices=["agent", "agent_noverify", "oneshot", "playbook", "always_hold"])
-    r.add_argument("--backend", default="meta", choices=["meta", "baseten"])
+    r.add_argument("--backend", default="meta", choices=["meta", "baseten", "llama"])
     rs = sub.add_parser("rescore", help="rebuild a results file from saved runs")
     rs.add_argument("--method", required=True, choices=["agent", "agent_noverify", "oneshot", "playbook", "always_hold"])
     rs.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "holdout3", "all", "stress_L0", "stress_L1", "stress_L2", "stress_L3"])
     im = sub.add_parser("impact", help="per-100-alarm impact under stated assumptions")
     im.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "holdout3", "all"])
     rc = sub.add_parser("recover", help="recovery after PM: bring a held chamber back to target")
-    rc.add_argument("--method", required=True, choices=["agent", "monitor_rule", "reset_recipe", "keep_recipe", "oracle"])
-    rc.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "holdout3", "all", "linked", "stress_L0", "stress_L1", "stress_L2", "stress_L3"])
-    rc.add_argument("--backend", default="meta", choices=["meta", "baseten"])
+    rc.add_argument("--method", required=True, choices=["agent", "agent_v2", "monitor_rule", "reset_recipe", "keep_recipe", "oracle"])
+    rc.add_argument("--split", default="dev", choices=["dev", "holdout", "holdout2", "holdout3", "all", "linked", "stress_L0", "stress_L1", "stress_L2", "stress_L3", "stress2_L0", "stress2_L1", "stress2_L2", "stress2_L3"])
+    rc.add_argument("--backend", default="meta", choices=["meta", "baseten", "llama"])
     rc.add_argument("--only", nargs="*", help="scenario names, e.g. seasoning fast_drift")
     rc.add_argument("--repeats", type=int, default=1)
     rc.add_argument("--resume", action="store_true", help="skip recoveries that already have a saved run")
@@ -64,9 +64,10 @@ def main(argv=None) -> None:
     rr = sub.add_parser("recover-report", help="recovery results and the pre-registered success criteria")
     rr.add_argument("--split", default="holdout", choices=["dev", "holdout", "holdout2", "holdout3", "all"])
     sw = sub.add_parser("sweep-report", help="accuracy and off-target lots across stress levels")
+    sw.add_argument("--prefix", default="stress", choices=["stress", "stress2"])
     fb = sub.add_parser("feedback", help="re-investigate the alarms the agent got wrong, with and without an engineer note")
     fb.add_argument("--split", default="stress_L3", choices=["dev", "holdout", "holdout2", "holdout3", "stress_L0", "stress_L1", "stress_L2", "stress_L3"])
-    fb.add_argument("--backend", default="meta", choices=["meta", "baseten"])
+    fb.add_argument("--backend", default="meta", choices=["meta", "baseten", "llama"])
     fb.add_argument("--resume", action="store_true")
     rp = sub.add_parser("report", help="confidence intervals for diagnosis and recovery on one split")
     rp.add_argument("--split", default="holdout3", choices=["dev", "holdout", "holdout2", "holdout3"])
@@ -117,7 +118,7 @@ def main(argv=None) -> None:
 
         rdir = RUNS / "recovery"
         if args.cmd == "recover":
-            client = make_client(args.backend) if args.method == "agent" else None
+            client = make_client(args.backend) if args.method in ("agent", "agent_v2") else None
             if args.repeats > 1:
                 out = RE.run_repeats(args.method, args.split, rdir, args.repeats, client, args.backend, hide=args.hide, resume=args.resume)
                 print(json.dumps(out["mean_std"], indent=2))
@@ -141,7 +142,7 @@ def main(argv=None) -> None:
     elif args.cmd == "sweep-report":
         from .stats import sweep
 
-        data = sweep(RUNS)
+        data = sweep(RUNS, args.prefix)
         for kind, key, unit in (("diagnosis", "decision_accuracy_pct", "% right"), ("recovery", "off_target_per_recovery", " off-target lots per recovery")):
             print(kind)
             for m, levels in data[kind].items():
