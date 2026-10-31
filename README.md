@@ -2,6 +2,12 @@
 
 **An agent that investigates semiconductor fab alarms and proposes what to do about them, with every claim checked against the evidence before an engineer signs off.**
 
+![A film-thickness control chart for one deposition chamber over 24 hours. After a PM at 63.7 hours the chamber runs thick and the last wafer, at 516.7 Å, is over the upper spec limit.](docs/img/alarm.png)
+
+- When a film-thickness alarm fires, the agent (Meta Muse Spark) pulls the lot route, compares chambers, runs a commonality test, re-measures when the answer depends on it, and files a disposition that cites each piece of evidence. A verifier sends back anything that cites a number not in the data or skips a playbook rule.
+- On 70 held-out alarms it made the right call every time in three runs (95% interval 94.8 to 100), 21 points above a fixed playbook on the same alarms; after a chamber is held it brings it back to target with 0.23 off-target lots per recovery against 1.86 for the standard two-monitor-wafer rule.
+- Pushed to a noise level where the evidence stops being readable, it fails safe (holds, not misses). All success criteria were written before the runs; one of the follow-up ideas did not work and the write-up says so.
+
 **Live demo: https://yhwang55.github.io/fabtriage/** (a one-page overview with the results; the read-only console, built from saved runs, is at [/demo/](https://yhwang55.github.io/fabtriage/demo/))
 Korean interface: https://yhwang55.github.io/fabtriage/demo/?lang=ko (agent output stays in its original English).
 
@@ -29,6 +35,8 @@ alarm ──> Muse Spark agent ──picks one tool per turn──> investigatio
 - **Tools** (`fabtriage/tools.py`): alarm, lot history, lot table query, chamber box-plot summary, trends, commonality analysis (ANOVA per step), FDC summary, PM log, re-measurement (costs lot delay), and a wafer map segmented by **SAM 3.1**. All numbers are computed in code; the model decides what to look at.
 - **Verification** (`fabtriage/verify.py`): runs inside `submit_disposition`, so the agent can't skip it. Every claim must cite an evidence id and every number in it must appear in that evidence. Playbook rules apply too, for example an out-of-spec lot can't be released without an in-spec re-measurement. It never sees the ground truth.
 - **Models**: Muse Spark 1.3 (Meta Model API) runs the agent; SAM 3.1 reads wafer maps; Muse Spark Open on Baseten runs the same agent on open weights.
+
+![For each kind of alarm, how often the agent used each check. Almost no two alarms took the same path; the fixed playbook, in the last row, runs the same checks every time.](docs/img/routes.png)
 
 ## Benchmark
 
