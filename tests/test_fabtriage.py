@@ -415,3 +415,41 @@ def test_feedback_runner_with_fake_model(tmp_path, monkeypatch):
     assert "noise" not in feedback.NOTE.lower().replace("noise level", "") or True  # the note must not name a cause
     for cause in ("metrology misread", "one-off", "sensor fault", "upstream"):
         assert cause not in feedback.NOTE.lower()
+
+
+def test_hosted_console_seeds_from_export_and_caps_live_runs(tmp_path, monkeypatch):
+    """A fresh clone has docs/demo but no runs/. The server copies the export back and applies the daily cap."""
+    import json
+
+    from fabtriage import server
+
+    export = tmp_path / "docs" / "demo"
+    (export / "data" / "run" / "agent").mkdir(parents=True)
+    (export / "data" / "run" / "agent" / "pm_shift-1.json").write_text(json.dumps({"run": {"case_id": "pm_shift-1", "status": "awaiting_signoff"}}))
+    (export / "data" / "recovery" / "run" / "agent").mkdir(parents=True)
+    (export / "data" / "recovery" / "run" / "agent" / "rec_after_pm_shift-1.json").write_text(json.dumps({"run": {"score": {"status": "released"}}}))
+    (export / "data" / "benchmark.json").write_text(json.dumps({"from": "export"}))
+    runs = tmp_path / "runs"
+    monkeypatch.setattr(server, "RUNS", runs)
+    monkeypatch.setattr(server, "EXPORT", export)
+    monkeypatch.setattr(server, "_live_log", runs / "live_starts.json")
+    assert server.seed_from_export() == 2
+    assert server._read_run("agent", "pm_shift-1")["status"] == "awaiting_signoff"
+    assert server.recovery_run("agent", "rec_after_pm_shift-1")["score"]["status"] == "released"
+    assert server.benchmark() == {"from": "export"}
+    assert server.seed_from_export() == 0  # not twice
+
+    monkeypatch.setattr(server, "LIVE_DAILY_CAP", 2)
+    monkeypatch.setenv("MODEL_API_KEY", "x")
+    started = []
+    monkeypatch.setattr(server.evaluate, "run_one", lambda *a, **k: started.append(a[1]) or {"status": "awaiting_signoff"})
+    monkeypatch.setattr(server, "make_client", lambda b: None)
+    assert server.live_budget()["left"] == 2
+    for cid in ("pm_shift-1", "pm_shift-2"):
+        out = server.start_live(cid)
+        assert out.get("started"), out
+        server._live.get(cid) and server._live[cid].join(timeout=5)
+    assert server.live_budget()["used"] == 2
+    out = server.start_live("pm_shift-3")
+    assert "used up" in out["error"]
+    assert len(started) == 2

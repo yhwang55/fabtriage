@@ -267,7 +267,7 @@ table.sum tr.agent td { font-weight: 600; }
   <div class="lang" role="group" aria-label="Language"><button data-lang="en" aria-pressed="true">EN</button><button data-lang="ko" aria-pressed="false">KR</button></div>
 </header>
 
-<div id="demobanner" class="demobanner" hidden><span data-i18n="banner">Read-only demo built from saved runs. Live investigations and sign-off run in the local version:</span> <a href="https://github.com/yhwang55/fabtriage">github.com/yhwang55/fabtriage</a></div>
+<div id="demobanner" class="demobanner" hidden><span data-i18n="banner">Read-only demo built from saved runs. Live investigations and sign-off run in the local version:</span> <a href="https://github.com/yhwang55/fabtriage">github.com/yhwang55/fabtriage</a><span id="livelink" hidden> · <a id="livelinka" href="#" target="_blank" rel="noopener"></a></span></div>
 <main id="shift" class="shift"></main>
 <main class="console" id="console" hidden>
   <div class="col list" id="list" aria-label="Alarms"></div>
@@ -370,7 +370,8 @@ const BENCH_NAMES = {
   oneshot: "Same model, one shot, no tools", playbook: "Fixed playbook", always_hold: "Always hold",
 };
 
-const state = { cases: [], liveEnabled: false, caseId: null, method: "agent", run: null, ctx: null, showTruth: false, poll: null };
+const LIVE_URL = window.FABTRIAGE_LIVE_URL || "";
+const state = { cases: [], liveEnabled: false, liveBudget: null, caseId: null, method: "agent", run: null, ctx: null, showTruth: false, poll: null };
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const PATTERNS = { none: "no thick region", center: "center-thick", edge_ring: "edge ring", edge_arc: "edge arc", local_spot: "local spot", multiple: "several thick regions", most_of_wafer: "thick over most of the wafer", wafer_wide: "wafer-wide region" };
@@ -459,6 +460,7 @@ async function loadCases() {
   const data = await api("/api/cases");
   state.cases = data.cases;
   state.liveEnabled = data.live_enabled;
+  state.liveBudget = data.live_budget || null;
   renderList();
   if (!$("#shift").hidden) renderShift();
 }
@@ -615,6 +617,8 @@ function alarmHeader(c, live, run) {
       ${run && state.method !== "compare" ? `<button class="btn ghost" id="replay">${state.replay != null ? L("Stop replay", "재생 멈추기") : L("Replay the investigation", "조사 다시 보기")}</button>` : ""}
       ${state.method === "agent" && !STATIC ? `<button class="btn ghost" id="runlive" ${canRun ? "" : "disabled"}>${heldOut ? L("Held out for the final benchmark", "최종 평가용으로 남겨 둔 알람") : live ? L("Investigating…", "조사 중…") : run ? L("Investigate again", "다시 조사") : L("Investigate live", "실시간 조사")}</button>` : ""}
       ${state.method === "agent" && !STATIC && !state.liveEnabled ? `<span class="note">${L("Add MODEL_API_KEY to .env to run live.", "실시간 조사를 하려면 .env에 MODEL_API_KEY를 넣으세요.")}</span>` : ""}
+      ${state.method === "agent" && !STATIC && state.liveBudget ? `<span class="note">${L(`Public demo: ${state.liveBudget.left} of ${state.liveBudget.cap} live investigations left today.`, `공개 데모: 오늘 실시간 조사 ${state.liveBudget.cap}건 중 ${state.liveBudget.left}건 남음.`)}</span>` : ""}
+      ${state.method === "agent" && STATIC && LIVE_URL && !heldOut ? `<a class="btn ghost" href="${LIVE_URL}/?case=${encodeURIComponent(state.caseId)}${KO() ? "&lang=ko" : ""}" target="_blank" rel="noopener">${L("Investigate live", "실시간 조사")} ↗</a>` : ""}
     </div>`;
 }
 
@@ -1326,8 +1330,15 @@ function setLang(lang) {
 }
 for (const b of document.querySelectorAll(".lang button")) b.onclick = () => setLang(b.dataset.lang);
 applyStatic();
-if (STATIC) { $("#demobanner").hidden = false; document.documentElement.style.setProperty("--banner", "33px"); }
-loadCases().then(() => { renderShift(); selectCase(state.cases[0].case_id); });
+if (STATIC) {
+  $("#demobanner").hidden = false; document.documentElement.style.setProperty("--banner", "33px");
+  if (LIVE_URL) { $("#livelink").hidden = false; $("#livelinka").href = LIVE_URL + (KO() ? "/?lang=ko" : "/"); $("#livelinka").textContent = L("Open the live console (runs the agent on a development alarm; a few dozen runs a day)", "실시간 콘솔 열기 (개발 세트 알람에서 에이전트를 직접 돌려 봅니다. 하루 수십 건 한도)"); }
+}
+loadCases().then(() => {
+  renderShift();
+  const want = new URLSearchParams(location.search).get("case");
+  selectCase(want && state.cases.some((c) => c.case_id === want) ? want : state.cases[0].case_id);
+});
 </script>
 </body>
 </html>

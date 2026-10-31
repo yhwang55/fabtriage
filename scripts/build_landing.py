@@ -6,6 +6,7 @@ Reads the demo data in docs/demo/data and the results in runs/, so rerun it afte
 and after `python -m fabtriage export`. Every number and chart on the page comes from them.
 """
 import json
+import os
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -15,6 +16,9 @@ diag = json.load(open(f"{U}/docs/demo/data/run/agent/pm_shift-1.json"))["run"]
 reca = json.load(open(f"{U}/docs/demo/data/recovery/run/agent/rec_after_pm_shift-1.json"))["run"]
 reck = json.load(open(f"{U}/docs/demo/data/recovery/run/keep_recipe/rec_after_pm_shift-1.json"))["run"]
 sweep = json.load(open(f"{U}/runs/sweep.json"))
+LIVE = (os.environ.get("FABTRIAGE_LIVE_URL") or "").rstrip("/")
+LIVE_NAV = f'<a href="{LIVE}/">Live console</a>' if LIVE else ""
+LIVE_CTA = ""  # filled in below, once HD and INK exist
 res = {m: json.load(open(f"{U}/runs/results_{m}_holdout3.json"))["rows"] for m in ["agent", "oneshot", "playbook"]}
 
 INK, MUTED, LINE, AMBER, AMBERD, HOLD, REL, SLATE, PAPER, PANEL = "#18262B", "#56666A", "#CBD3D1", "#D99A0B", "#8A6100", "#B93A2E", "#2E7A57", "#3E5A66", "#EDF0EE", "#FAFBFA"
@@ -311,13 +315,17 @@ def verifier_section():
     return "".join(out)
 
 
+if LIVE:
+    LIVE_CTA = f'<a href="{LIVE}/" style="{HD}; font-weight: 600; font-size: 20px; color: {INK}; border: 1.5px solid {INK}; padding: 12.5px 24px; text-decoration: none; min-height: 44px; box-sizing: border-box">Run it live</a>'
+
+
 def main_page():
     out = [HEAD]
     out.append(f'''<div style="{BD}; color: {INK}; background: {PAPER}; min-height: 100%;">
 <div style="max-width: 1180px; margin: 0 auto; padding: 40px 32px 80px; display: flex; flex-direction: column; gap: 72px">
 <header style="display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 16px">
 <div style="{HD}; font-weight: 700; font-size: 24px">FabTriage</div>
-<nav style="display: flex; gap: 28px; font-size: 16px; flex-wrap: wrap"><a href="demo/">Open the console</a><a href="https://github.com/yhwang55/fabtriage">Code and results</a><a href="demo/?lang=ko">한국어</a></nav>
+<nav style="display: flex; gap: 28px; font-size: 16px; flex-wrap: wrap"><a href="demo/">Open the console</a>{LIVE_NAV}<a href="https://github.com/yhwang55/fabtriage">Code and results</a><a href="demo/?lang=ko">한국어</a></nav>
 </header>
 <section style="display: flex; flex-direction: column; gap: 28px">
 <h1 style="{HD}; font-weight: 700; font-size: 64px; line-height: 1.02; margin: 0; max-width: 16ch">When a chip fab alarm fires, the agent finds out why and proves it.</h1>
@@ -360,7 +368,7 @@ def main_page():
 </section>
 <section style="display: flex; flex-wrap: wrap; gap: 24px; align-items: center; justify-content: space-between; border-top: 1px solid {LINE}; padding-top: 28px">
 <p style="margin: 0; font-size: 16px; line-height: 1.5; max-width: 62ch; color: {MUTED}">A simulated fab, not production data. Scenarios follow public fab case studies and practitioner input. The recovery idea comes from Prof. Jang (The Catholic University of Korea). Built by Yoon Hwang for the Meta Global AI Developer Hackathon.</p>
-<a href="demo/" style="{HD}; font-weight: 600; font-size: 20px; color: {PANEL}; background: {INK}; padding: 14px 24px; text-decoration: none; min-height: 44px; box-sizing: border-box">Open the console</a>
+<div style="display: flex; gap: 12px; flex-wrap: wrap"><a href="demo/" style="{HD}; font-weight: 600; font-size: 20px; color: {PANEL}; background: {INK}; padding: 14px 24px; text-decoration: none; min-height: 44px; box-sizing: border-box">Open the console</a>{LIVE_CTA}</div>
 </section>
 </div></div>''')
     out.append(TAIL)

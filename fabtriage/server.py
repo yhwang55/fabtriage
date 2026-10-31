@@ -8,6 +8,8 @@ Reads and writes runs/<method>/<case>/run.json. Live agent runs need MODEL_API_K
 from __future__ import annotations
 
 import json
+import os
+import shutil
 import tempfile
 import threading
 import time
@@ -21,8 +23,69 @@ from .client import has_key, make_client
 WEB = Path(__file__).parent / "web"
 RUNS = Path("runs")
 METHODS = ["agent", "playbook", "always_hold", "agent_noverify", "oneshot", "agent_baseten", "agent_llama"]
+EXPORT = Path("docs/demo")  # the static export; a hosted console with no runs/ seeds itself from it
 _live: dict = {}  # case_id -> thread
 _lock = threading.Lock()
+
+# Public demo guard: live runs cost API credit, so a hosted console allows a fixed number a day.
+LIVE_DAILY_CAP = int(os.environ.get("LIVE_DAILY_CAP", "0") or 0)  # 0 means no cap (local use)
+LIVE_MAX_CONCURRENT = 3
+_live_log = RUNS / "live_starts.json"
+
+
+def seed_from_export() -> int:
+    """If runs/ has no saved investigations but the static export exists, copy its runs back in.
+
+    A hosted copy of the console starts from a fresh clone, where runs/ is not in git but
+    docs/demo is. Returns the number of runs copied."""
+    if (RUNS / "agent").exists() or not (EXPORT / "data" / "run").exists():
+        return 0
+    n = 0
+    for f in (EXPORT / "data" / "run").glob("*/*.json"):
+        run = json.loads(f.read_text()).get("run")
+        if run:
+            dest = RUNS / f.parent.name / f.stem / "run.json"
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(json.dumps(run, default=str))
+            n += 1
+    for f in (EXPORT / "maps").glob("*/*/*.png"):
+        dest = RUNS / f.parent.parent.name / f.parent.name / "maps" / f.name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(f, dest)
+    for f in (EXPORT / "data" / "recovery" / "run").glob("*/*.json"):
+        run = json.loads(f.read_text()).get("run")
+        if run:
+            dest = RUNS / "recovery" / f.parent.name / f.stem / "run.json"
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(json.dumps(run, default=str))
+            n += 1
+    return n
+
+
+def live_budget() -> dict:
+    """How many live runs started today (UTC) and how many are allowed."""
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    used = 0
+    if _live_log.exists():
+        try:
+            log = json.loads(_live_log.read_text())
+            used = log.get(today, 0)
+        except ValueError:
+            pass
+    return {"cap": LIVE_DAILY_CAP, "used": used, "left": (LIVE_DAILY_CAP - used) if LIVE_DAILY_CAP else None, "running": len(_live)}
+
+
+def _count_live_start() -> None:
+    today = time.strftime("%Y-%m-%d", time.gmtime())
+    log = {}
+    if _live_log.exists():
+        try:
+            log = json.loads(_live_log.read_text())
+        except ValueError:
+            log = {}
+    log = {today: log.get(today, 0) + 1}  # only today matters
+    _live_log.parent.mkdir(parents=True, exist_ok=True)
+    _live_log.write_text(json.dumps(log))
 
 
 def _run_path(method: str, case_id: str) -> Path:
@@ -107,6 +170,8 @@ def wafer_png(case_id: str, lot_id: str) -> bytes | None:
 
 
 def benchmark() -> dict:
+    if not (RUNS / "results_agent_holdout3.json").exists() and (EXPORT / "data" / "benchmark.json").exists():
+        return json.loads((EXPORT / "data" / "benchmark.json").read_text())  # hosted copy: results live in the export
     out = {}
     for split in ("dev", "holdout", "holdout2", "holdout3"):
         out[split] = {}
@@ -192,6 +257,13 @@ def start_live(case_id: str, engineer_note: str | None = None) -> dict:
     with _lock:
         if case_id in _live:
             return {"error": "an investigation is already running for this alarm"}
+        if len(_live) >= LIVE_MAX_CONCURRENT:
+            return {"error": f"{LIVE_MAX_CONCURRENT} investigations are already running; try again in a minute"}
+        if LIVE_DAILY_CAP:
+            b = live_budget()
+            if b["left"] <= 0:
+                return {"error": f"Today's {LIVE_DAILY_CAP} live investigations are used up (the public demo has a daily budget). Recorded runs still work; the budget resets at 00:00 UTC."}
+            _count_live_start()
         previous = _read_run("agent", case_id)
         history = list((previous or {}).get("history") or [])
         if previous and previous.get("disposition"):
@@ -264,7 +336,7 @@ class Handler(BaseHTTPRequestHandler):
             if url.path in ("/", "/index.html"):
                 return self._send((WEB / "index.html").read_bytes(), "text/html; charset=utf-8")
             if url.path == "/api/cases":
-                return self._json({"cases": cases(), "live_enabled": has_key("meta")})
+                return self._json({"cases": cases(), "live_enabled": has_key("meta"), "live_budget": live_budget() if LIVE_DAILY_CAP else None})
             if url.path == "/api/run":
                 from .sources import SOURCES
 
@@ -312,9 +384,12 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"error": str(error)}, 400)
 
 
-def serve(port: int = 8770) -> None:
-    server = ThreadingHTTPServer(("127.0.0.1", port), Handler)
-    print(f"FabTriage console: http://127.0.0.1:{port}  (Ctrl+C to stop)", flush=True)
+def serve(port: int = 8770, host: str = "127.0.0.1") -> None:
+    n = seed_from_export()
+    if n:
+        print(f"seeded {n} saved runs from {EXPORT}", flush=True)
+    server = ThreadingHTTPServer((host, port), Handler)
+    print(f"FabTriage console: http://{host}:{port}  (Ctrl+C to stop)" + (f"; live runs capped at {LIVE_DAILY_CAP} a day" if LIVE_DAILY_CAP else ""), flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:

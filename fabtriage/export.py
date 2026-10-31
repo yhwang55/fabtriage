@@ -21,10 +21,16 @@ def _write(path: Path, data) -> None:
     path.write_text(json.dumps(data, default=str, separators=(",", ":")))
 
 
-def export(out: Path) -> dict:
+def export(out: Path, live_url: str | None = None) -> dict:
+    """live_url: a hosted copy of the console (python -m fabtriage serve --host 0.0.0.0) that the
+    static site links to for live investigations. Also read from FABTRIAGE_LIVE_URL."""
+    import os
+
     out = Path(out)
+    live_url = (live_url or os.environ.get("FABTRIAGE_LIVE_URL") or "").rstrip("/")
     html = (server.WEB / "index.html").read_text()
-    html = html.replace("<script>", "<script>window.FABTRIAGE_STATIC = true;</script>\n<script>", 1)
+    inject = "window.FABTRIAGE_STATIC = true;" + (f" window.FABTRIAGE_LIVE_URL = {json.dumps(live_url)};" if live_url else "")
+    html = html.replace("<script>", f"<script>{inject}</script>\n<script>", 1)
     out.mkdir(parents=True, exist_ok=True)
     (out / "index.html").write_text(html)
     (out / ".nojekyll").write_text("")

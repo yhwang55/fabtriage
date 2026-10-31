@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 
 from . import evaluate, sim
@@ -75,8 +76,10 @@ def main(argv=None) -> None:
     dm.add_argument("--port", type=int, default=8771)
     ex = sub.add_parser("export", help="write the console as a static read-only site")
     ex.add_argument("--out", default="docs/demo")
+    ex.add_argument("--live-url", default=None, help="hosted console the static site links to for live runs")
     sv = sub.add_parser("serve")
-    sv.add_argument("--port", type=int, default=8770)
+    sv.add_argument("--port", type=int, default=int(os.environ.get("PORT", "8770")))
+    sv.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to serve on all interfaces (hosted copy)")
     cmp_ = sub.add_parser("compare")
     cmp_.add_argument("--split", default="dev")
     args = p.parse_args(argv)
@@ -201,11 +204,11 @@ def main(argv=None) -> None:
     elif args.cmd == "export":
         from .export import export
 
-        print(json.dumps(export(Path(args.out)), indent=2))
+        print(json.dumps(export(Path(args.out), args.live_url), indent=2))
     elif args.cmd == "serve":
         from .server import serve
 
-        serve(args.port)
+        serve(args.port, args.host)
     elif args.cmd == "compare":
         rows = []
         for path in sorted(RUNS.glob(f"results_*_{args.split}.json")):

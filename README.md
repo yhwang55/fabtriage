@@ -298,6 +298,14 @@ python -m fabtriage serve
 
 
 The front page (`docs/index.html`) is generated from the same saved results: `python scripts/build_landing.py`, after `export`.
+
+A hosted copy of the console with live runs: deploy this repository as a Python web service
+(build `pip install -r requirements.txt`, start `python -m fabtriage serve --host 0.0.0.0`,
+which reads `PORT`), set `MODEL_API_KEY`, and set `LIVE_DAILY_CAP` to a number of live
+investigations a day so the API budget cannot be drained. A fresh clone has no `runs/`, so the
+server seeds itself from `docs/demo`. Pass the hosted URL to the static build so it links
+there: `FABTRIAGE_LIVE_URL=https://... python -m fabtriage export --out docs/demo` and the
+same variable for `scripts/build_landing.py`.
 ## Console
 
 ```bash
