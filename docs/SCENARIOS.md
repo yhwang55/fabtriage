@@ -4,6 +4,39 @@ Seven alarm types, each with a hidden ground truth. About half of the cases also
 
 The simulator is illustrative. Its numbers are not taken from any real fab. What we tried to get right is how each cause shows up in the data, using public sources and the views of two practicing fab data scientists (former SK hynix, data-side roles, not fab operations).
 
+## What this simulator assumes
+
+A practitioner who read the repository (a senior fab data scientist) pointed out that several
+things below are choices of this simulator, not facts about fabs. Stated plainly:
+
+- **One product, one recipe, one metrology recipe.** Every lot through the deposition step runs
+  the same product on the same recipe and is measured the same way, so a chamber-to-chamber
+  comparison is valid by construction. In a real fab the same chamber runs different products
+  on different recipes, and the first step before any chamber comparison is to check that the
+  lots being compared share product, process, recipe and metrology conditions. The simulator
+  does not model that, and the agent does not have to check it.
+- **Recipe and APC changes are not simulated.** The only planned event on a chamber is a PM. In
+  a real fab a recipe or controller change is as common a cause of a shift as a PM, and is
+  checked alongside it.
+- **The direction of the post-PM shift** (thick, from a buildup reset) and **the signature of an
+  upstream clean problem** (center-thick, on every chamber) are this simulator's choices. Both
+  depend on the process and the recipe; another step could shift thin after PM or show a
+  different spatial pattern.
+- **A one-off wafer is only "noise" after the film has been checked directly.** The simulator
+  draws such a wafer with a local thick spot and a normal chamber history. A normal chamber
+  history on its own does not make an odd wafer harmless, so the playbook requires an in-spec
+  re-measurement of the alarm lot before it can be released as a one-off (originally only for
+  out-of-spec alarms; now for every alarm). An investigation that cannot get that evidence ends
+  unresolved and goes to an engineer rather than as a release. Checked on the same ten held-out
+  one-off alarms before and after: 10 of 10 right both times, no refusals, because the agent
+  already re-measured every time. A first attempt also reworded the agent's definition of
+  "noise" to mention the re-measurement, and that one line turned 4 of the 10 into chamber holds
+  (the model read it as "the re-measurement must come back normal", which is the metrology
+  case); the wording was reverted and only the verifier rule kept.
+- **The order of checks is up to the investigator.** The playbook sets minimum evidence per
+  conclusion, not an order; the agent re-measures first when metrology is suspect and runs the
+  commonality test only when the pattern calls for it (see the route map on the front page).
+
 ## pm shift
 
 **What happens.** A chamber comes back from PM running thick.
@@ -69,7 +102,7 @@ The simulator is illustrative. Its numbers are not taken from any real fab. What
 
 **How it shows in the data.** A single point outside control limits but inside spec; the chamber's history is normal.
 
-**Correct response.** Release.
+**Correct response.** Release, after an in-spec re-measurement of the lot. In the held-out runs the agent re-measured before every one of its 45 one-off releases (36 of them also looked at the wafer map); the playbook now requires it.
 
 **Practitioner view.** False-alarm holds are usually cleared in two to three hours, at most half a day.
 

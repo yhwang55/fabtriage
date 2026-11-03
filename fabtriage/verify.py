@@ -142,8 +142,8 @@ def check(inv, d: dict) -> list:
         if "run_commonality" not in cited_tools:
             problems.append("rule: cause 'upstream' must cite run_commonality")
     if cause == "noise":
-        if alarm["type"] == "OOS" and not in_spec_remeasure:
-            problems.append("rule: an out-of-spec alarm can't be called noise without an in-spec re-measurement")
+        if not in_spec_remeasure:  # the chamber's history alone does not make one odd wafer harmless
+            problems.append("rule: a one-off wafer can't be released on the chamber's history alone; re-measure the alarm lot and cite an in-spec re-measurement")
         if not cited_tools & {"get_trend", "get_chamber_summary"}:
             problems.append("rule: cause 'noise' must cite the chamber's history (get_trend or get_chamber_summary)")
     if cause == "sensor":

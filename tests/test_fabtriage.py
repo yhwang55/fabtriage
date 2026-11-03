@@ -96,6 +96,27 @@ def test_oos_lot_cannot_be_released_without_remeasure(tmp_path):
     assert any("re-measurement" in p for p in r["problems"])
 
 
+def test_one_off_wafer_needs_a_remeasurement_even_inside_spec(tmp_path):
+    """Practitioner feedback: a normal chamber history alone does not make one odd wafer harmless."""
+    case = sim.load("wafer_noise-1")
+    assert case.alarm["type"] == "OOC"
+    inv = Investigation(case, tmp_path)
+    a = inv.call("get_alarm", {})
+    t = inv.call("get_trend", {"chamber": case.alarm["chamber"], "signal": "thickness"})
+    disp = {
+        "cause": "noise",
+        "actions": [{"type": "release_lot", "target": case.alarm["lot_id"]}],
+        "claims": [{"evidence_id": a["evidence_id"], "statement": "One wafer."}, {"evidence_id": t["evidence_id"], "statement": "History flat."}],
+        "summary": "x",
+    }
+    r = inv.call("submit_disposition", disp)
+    assert not r["accepted"] and any("re-measure" in p for p in r["problems"])
+    m = inv.call("request_measurement", {"lot_id": case.alarm["lot_id"], "met_tool": "MET01"})
+    disp["claims"].append({"evidence_id": m["evidence_id"], "statement": "Re-measured in spec."})
+    r = inv.call("submit_disposition", disp)
+    assert r["accepted"], r
+
+
 def test_three_refusals_go_to_an_engineer(tmp_path):
     inv = Investigation(sim.load("wafer_noise-1"), tmp_path)
     for _ in range(3):

@@ -20,7 +20,7 @@ from pathlib import Path
 from . import evaluate, sim
 from .client import has_key, load_env, make_client
 
-RUNS = Path("runs")
+RUNS = Path(os.environ.get("FABTRIAGE_RUNS", "runs"))  # a different folder for a check run that must not touch the benchmark
 
 
 def _clients(method: str, backend: str):

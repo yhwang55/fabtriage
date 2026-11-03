@@ -5,3 +5,4 @@ __pycache__/
 .pytest_cache/
 runs/
 .scratch/
+runs_check*
