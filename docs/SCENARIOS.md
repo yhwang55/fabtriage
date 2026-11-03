@@ -33,6 +33,16 @@ things below are choices of this simulator, not facts about fabs. Stated plainly
   "noise" to mention the re-measurement, and that one line turned 4 of the 10 into chamber holds
   (the model read it as "the re-measurement must come back normal", which is the metrology
   case); the wording was reverted and only the verifier rule kept.
+- **The alarm comes later than it would in a real fab.** The simulator raises the alarm on the
+  latest wafer, so in a post-PM shift several out-of-spec lots can already be on the chart
+  (the front-page chart shows six). A second reviewer (also a senior fab data scientist)
+  pointed out that in production a single out-of-spec wafer downs the chamber on the spot, so
+  the investigation starts at the first one, with the hold already in place and far fewer
+  post-event points to read. The agent's job is then less "whether to hold" and more "why,
+  what to fix, and whether to release". The stress test's recency axis (faults that began more
+  recently, down to a quarter of the usual window) is the closest thing here to that
+  condition; it is where the agent's lead over the playbook stays through level 2 and goes at
+  level 3.
 - **The order of checks is up to the investigator.** The playbook sets minimum evidence per
   conclusion, not an order; the agent re-measures first when metrology is suspect and runs the
   commonality test only when the pattern calls for it (see the route map on the front page).
